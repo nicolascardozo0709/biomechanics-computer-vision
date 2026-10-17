@@ -1,0 +1,335 @@
+"""
+Main Entry Point — AI Movement & Biomechanics Kinematic Pipeline.
+
+Processes video streams or synthetic benchmark data, extracts 3D joint kinematics,
+evaluates movement competency, renders annotated HUD video, and outputs publication charts.
+
+Author: Nicolas Cardozo
+Pontificia Universidad Javeriana
+"""
+
+import argparse
+import json
+import sys
+import io
+from pathlib import Path
+from typing import Any
+import numpy as np
+
+# Ensure src is on python path
+curr_dir = Path(__file__).resolve().parent
+if str(curr_dir) not in sys.path:
+    sys.path.insert(0, str(curr_dir))
+
+if sys.platform == "win32":
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
+
+from src.data.video_loader import VideoLoader, generate_benchmark_squat_data
+from src.features.kinematics import (
+    calculate_angle_3d,
+    calculate_trunk_inclination,
+    calculate_frontal_valgus_index,
+    smooth_kinematic_signal,
+    calculate_angular_velocity,
+    segment_squat_phases
+)
+from src.models.pose_detector import PoseDetector
+from src.models.technique_evaluator import TechniqueEvaluator
+from src.visualization.biomechanics_renderer import BiomechanicsRenderer
+from src.visualization.kinematic_plots import plot_kinematic_telemetry, plot_radar_profile
+
+
+def run_pipeline(
+    source_video: str | None = None,
+    use_benchmark: bool = False,
+    output_dir: Path | str = "outputs",
+    save_video: bool = True
+) -> dict[str, Any]:
+    """
+    Execute full end-to-end kinematic analysis pipeline.
+    """
+    out_path = curr_dir / output_dir if not Path(output_dir).is_absolute() else Path(output_dir)
+    out_path.mkdir(parents=True, exist_ok=True)
+    data_dir = curr_dir / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+
+    print("\n" + "=" * 70)
+    print(">> AI BIOMECHANICS & KINEMATICS ENGINE -- COMPUTER VISION PIPELINE")
+    print("   Developer: Nicolas Cardozo | Pontificia Universidad Javeriana")
+    print("=" * 70)
+
+    # 1. Acquire Data (Benchmark or Real Video)
+    if use_benchmark or source_video is None:
+        print("\n[1/5] Ingesting Benchmark Motion Dataset (2 Representative Repetitions)...")
+        benchmark_video_path = data_dir / "sample_squat_benchmark.mp4"
+        raw_landmarks, meta = generate_benchmark_squat_data(
+            output_video_path=benchmark_video_path,
+            num_frames=180,
+            fps=30.0
+        )
+        source_path = str(benchmark_video_path)
+        fps = meta["fps"]
+        num_frames = meta["num_frames"]
+        use_precomputed_landmarks = True
+    else:
+        print(f"\n[1/5] Ingesting Video File: {source_video}...")
+        source_path = source_video
+        loader = VideoLoader(source_path)
+        if not loader.open():
+            raise FileNotFoundError(f"Could not open input video: {source_video}")
+        fps = loader.fps
+        num_frames = loader.frame_count
+        loader.close()
+        use_precomputed_landmarks = False
+        raw_landmarks = []
+
+    # 2. Extract Landmarks
+    print(f"\n[2/5] Extracting 3D Pose Landmarks across {num_frames} frames (FPS: {fps:.1f})...")
+    timestamps: list[float] = []
+    left_knee_raw: list[float] = []
+    right_knee_raw: list[float] = []
+    trunk_raw: list[float] = []
+    left_valgus_raw: list[float] = []
+    right_valgus_raw: list[float] = []
+    processed_landmarks: list[dict[str, np.ndarray]] = []
+
+    if use_precomputed_landmarks:
+        for idx, lm in enumerate(raw_landmarks):
+            t = float(idx / fps)
+            timestamps.append(t)
+            processed_landmarks.append(lm)
+
+            # Compute raw joint angles
+            k_l = calculate_angle_3d(lm["left_hip"], lm["left_knee"], lm["left_ankle"])
+            k_r = calculate_angle_3d(lm["right_hip"], lm["right_knee"], lm["right_ankle"])
+            trunk = calculate_trunk_inclination(lm["left_shoulder"], lm["left_hip"])
+            v_l = calculate_frontal_valgus_index(lm["left_hip"], lm["left_knee"], lm["left_ankle"], is_left=True)
+            v_r = calculate_frontal_valgus_index(lm["right_hip"], lm["right_knee"], lm["right_ankle"], is_left=False)
+
+            left_knee_raw.append(k_l)
+            right_knee_raw.append(k_r)
+            trunk_raw.append(trunk)
+            left_valgus_raw.append(v_l["medial_displacement"])
+            right_valgus_raw.append(v_r["medial_displacement"])
+    else:
+        detector = PoseDetector()
+        loader = VideoLoader(source_path)
+        for idx, t, frame in loader.frames():
+            timestamps.append(t)
+            lm = detector.detect_frame(frame)
+            if lm is not None and "left_knee" in lm:
+                processed_landmarks.append(lm)
+                k_l = calculate_angle_3d(lm["left_hip"], lm["left_knee"], lm["left_ankle"])
+                k_r = calculate_angle_3d(lm["right_hip"], lm["right_knee"], lm["right_ankle"])
+                trunk = calculate_trunk_inclination(lm["left_shoulder"], lm["left_hip"])
+                v_l = calculate_frontal_valgus_index(lm["left_hip"], lm["left_knee"], lm["left_ankle"], is_left=True)
+                v_r = calculate_frontal_valgus_index(lm["right_hip"], lm["right_knee"], lm["right_ankle"], is_left=False)
+
+                left_knee_raw.append(k_l)
+                right_knee_raw.append(k_r)
+                trunk_raw.append(trunk)
+                left_valgus_raw.append(v_l["medial_displacement"])
+                right_valgus_raw.append(v_r["medial_displacement"])
+            else:
+                # Interpolate or hold previous
+                left_knee_raw.append(left_knee_raw[-1] if left_knee_raw else 180.0)
+                right_knee_raw.append(right_knee_raw[-1] if right_knee_raw else 180.0)
+                trunk_raw.append(trunk_raw[-1] if trunk_raw else 0.0)
+                left_valgus_raw.append(left_valgus_raw[-1] if left_valgus_raw else 0.0)
+                right_valgus_raw.append(right_valgus_raw[-1] if right_valgus_raw else 0.0)
+        loader.close()
+        detector.close()
+
+    # Convert to NumPy
+    time_arr = np.array(timestamps, dtype=np.float64)
+    lk_arr = np.array(left_knee_raw, dtype=np.float64)
+    rk_arr = np.array(right_knee_raw, dtype=np.float64)
+    trunk_arr = np.array(trunk_raw, dtype=np.float64)
+    lv_arr = np.array(left_valgus_raw, dtype=np.float64)
+    rv_arr = np.array(right_valgus_raw, dtype=np.float64)
+
+    # 3. Apply Savitzky-Golay Kinematic Filtering & Compute Angular Velocity
+    print("\n[3/5] Applying Savitzky-Golay Kinematic Smoothing & Phase Velocity Calculus...")
+    lk_filt = smooth_kinematic_signal(lk_arr, window_length=9, polyorder=2)
+    rk_filt = smooth_kinematic_signal(rk_arr, window_length=9, polyorder=2)
+    trunk_filt = smooth_kinematic_signal(trunk_arr, window_length=9, polyorder=2)
+    lv_filt = smooth_kinematic_signal(lv_arr, window_length=9, polyorder=2)
+    rv_filt = smooth_kinematic_signal(rv_arr, window_length=9, polyorder=2)
+
+    ang_vel = calculate_angular_velocity(lk_filt, fps=fps)
+
+    # 4. Movement Phase Segmentation & Biomechanical Technique Evaluation
+    print("\n[4/5] Segmenting Repetitions & Scoring 5-Dimension Movement Competency...")
+    reps = segment_squat_phases(lk_filt, fps=fps)
+    print(f"   -> Successfully segmented {len(reps)} complete repetition cycle(s).")
+
+    evaluator = TechniqueEvaluator()
+    evaluations: list[dict[str, Any]] = []
+    for r in reps:
+        ev = evaluator.evaluate_repetition(
+            rep_meta=r,
+            left_knee_angles=lk_filt,
+            right_knee_angles=rk_filt,
+            trunk_angles=trunk_filt,
+            left_valgus_series=lv_filt,
+            right_valgus_series=rv_filt
+        )
+        evaluations.append(ev)
+
+    # 5. Render Output Visualizations
+    print("\n[5/5] Generating Visual Artifacts & Telemetry Plots...")
+    plot_telemetry_path = out_path / "kinematic_telemetry_report.png"
+    plot_radar_path = out_path / "biomechanical_radar_profile.png"
+
+    plot_kinematic_telemetry(
+        timestamps=time_arr,
+        left_knee_angles=lk_filt,
+        right_knee_angles=rk_filt,
+        angular_velocity=ang_vel,
+        trunk_angles=trunk_filt,
+        left_valgus=lv_filt,
+        right_valgus=rv_filt,
+        reps=reps,
+        output_path=plot_telemetry_path
+    )
+    print(f"   [OK] Telemetry Report saved to: {plot_telemetry_path}")
+
+    plot_radar_profile(
+        rep_evaluations=evaluations,
+        output_path=plot_radar_path
+    )
+    print(f"   [OK] Radar Profile saved to: {plot_radar_path}")
+
+    # Render Annotated Video if requested
+    annotated_video_path = out_path / "annotated_squat_analysis.mp4"
+    if save_video and Path(source_path).exists():
+        import cv2
+        renderer = BiomechanicsRenderer()
+        cap = cv2.VideoCapture(source_path)
+        w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+        out_vid = cv2.VideoWriter(str(annotated_video_path), fourcc, fps, (w, h))
+
+        f_idx = 0
+        while cap.isOpened():
+            ret, frame = cap.read()
+            if not ret or f_idx >= len(processed_landmarks):
+                break
+
+            # Current metrics
+            cur_knee = float(lk_filt[f_idx])
+            cur_trunk = float(trunk_filt[f_idx])
+            cur_valgus = bool(lv_filt[f_idx] > 0.02 or rv_filt[f_idx] > 0.02)
+
+            # Determine rep count and phase
+            rep_num = 0
+            phase = "STANDBY"
+            for r in reps:
+                if r["start_frame"] <= f_idx <= r["end_frame"]:
+                    rep_num = r["rep_number"]
+                    if f_idx < r["bottom_frame"]:
+                        phase = "ECCENTRIC"
+                    elif f_idx == r["bottom_frame"]:
+                        phase = "INFLECTION"
+                    else:
+                        phase = "CONCENTRIC"
+                    break
+
+            depth_status = "BELOW PARALLEL" if cur_knee < 88.0 else ("PARALLEL" if cur_knee <= 100.0 else "ABOVE")
+
+            metric_dict = {
+                "knee_angle": cur_knee,
+                "trunk_angle": cur_trunk,
+                "valgus_alert": cur_valgus,
+                "rep_count": rep_num,
+                "phase": phase,
+                "depth_status": depth_status
+            }
+
+            annotated = renderer.render_frame(frame, processed_landmarks[f_idx], metric_dict)
+            out_vid.write(annotated)
+            f_idx += 1
+
+        cap.release()
+        out_vid.release()
+
+        # Convert to web-compatible H.264 if imageio-ffmpeg is available
+        try:
+            import subprocess
+            import imageio_ffmpeg
+            ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
+            temp_h264 = annotated_video_path.parent / (annotated_video_path.stem + "_h264.mp4")
+            cmd = [
+                ffmpeg_exe, "-y", "-i", str(annotated_video_path),
+                "-c:v", "libx264", "-pix_fmt", "yuv420p", "-movflags", "+faststart",
+                str(temp_h264)
+            ]
+            subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+            import os
+            os.replace(temp_h264, annotated_video_path)
+        except Exception:
+            pass
+
+        print(f"   [OK] Annotated HUD Video saved to: {annotated_video_path}")
+
+    # Compile Final Structured Report
+    overall_mean_score = float(np.mean([e["overall_score"] for e in evaluations])) if evaluations else 0.0
+    summary_report = {
+        "metadata": {
+            "source": source_path,
+            "total_frames": len(time_arr),
+            "fps": fps,
+            "duration_s": round(float(time_arr[-1]) if len(time_arr) > 0 else 0.0, 2),
+            "total_reps_detected": len(reps),
+            "composite_mean_score": round(overall_mean_score, 1)
+        },
+        "repetitions": evaluations,
+        "artifacts": {
+            "telemetry_chart": str(plot_telemetry_path),
+            "radar_chart": str(plot_radar_path),
+            "annotated_video": str(annotated_video_path) if save_video else None
+        }
+    }
+
+    report_json_path = out_path / "biomechanical_report.json"
+    with open(report_json_path, "w", encoding="utf-8") as f:
+        json.dump(summary_report, f, indent=2)
+    print(f"   [OK] Summary JSON saved to: {report_json_path}")
+
+    # Print Terminal Executive Summary
+    print("\n" + "-" * 70)
+    print("[REPORT] EXECUTIVE BIOMECHANICAL AUDIT SUMMARY:")
+    print("-" * 70)
+    for ev in evaluations:
+        print(f"\n[REPETITION #{ev['rep_number']}] -- Composite Technique Score: {ev['overall_score']} / 100")
+        print(f"  - Classification:     {ev['depth_category']} (Min Knee Flexion: {ev['min_knee_angle_deg']} deg)")
+        print(f"  - Torso Alignment:    Max Lean {ev['max_trunk_lean_deg']} deg (Limit: 45.0 deg)")
+        print(f"  - Frontal Stability:  Peak Medial Valgus Drift: {ev['peak_valgus_displacement']}")
+        print(f"  - Bilateral Symmetry: {ev['knee_asymmetry_deg']} deg disparity between limbs")
+        print(f"  - Tempo Profile:      Eccentric: {ev['eccentric_time_s']}s | Concentric: {ev['concentric_time_s']}s")
+        print("  - Coaching Prescription:")
+        for cue in ev["coaching_cues"]:
+            print(f"    -> {cue}")
+
+    print("\n" + "=" * 70)
+    print("[SUCCESS] PIPELINE EXECUTION COMPLETED SUCCESSFULLY!")
+    print("=" * 70 + "\n")
+    return summary_report
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="AI Biomechanics & Kinematics Engine")
+    parser.add_argument("--source", type=str, default=None, help="Path to video file or webcam index")
+    parser.add_argument("--benchmark", action="store_true", help="Force synthetic benchmark evaluation")
+    parser.add_argument("--output-dir", type=str, default="outputs", help="Directory for output artifacts")
+    parser.add_argument("--no-video", action="store_true", help="Skip rendering annotated video file")
+
+    args = parser.parse_args()
+    run_pipeline(
+        source_video=args.source,
+        use_benchmark=args.benchmark,
+        output_dir=args.output_dir,
+        save_video=not args.no_video
+    )

@@ -1,0 +1,146 @@
+{
+  "metadata": {
+    "source": "C:\\Users\\nicoc\\Downloads\\data-science-portfolio\\projects\\03-biomechanics-computer-vision\\data\\upload_WhatsApp Video 2026-10-16 at 19.10.02.mp4",
+    "total_frames": 1519,
+    "fps": 29.960552268244577,
+    "duration_s": 50.67,
+    "total_reps_detected": 5,
+    "composite_mean_score": 61.3
+  },
+  "repetitions": [
+    {
+      "rep_number": 1,
+      "overall_score": 47.0,
+      "depth_score": 88.0,
+      "alignment_score": 25.0,
+      "trunk_score": 0.0,
+      "symmetry_score": 20.0,
+      "tempo_score": 80.0,
+      "depth_category": "Valid Parallel Depth",
+      "min_knee_angle_deg": 86.5,
+      "max_trunk_lean_deg": 90.6,
+      "peak_valgus_displacement": 0.4607,
+      "knee_asymmetry_deg": 53.4,
+      "eccentric_time_s": 3.04,
+      "concentric_time_s": 0.77,
+      "flags": {
+        "knee_valgus": true,
+        "excessive_forward_lean": true,
+        "shallow_depth": false
+      },
+      "coaching_cues": [
+        "Knee Valgus Detected: Medial collapse measured 0.4607. Engage gluteus medius by cuing 'spread the floor' and tracking knees over second toe.",
+        "Excessive Forward Lean: Torso inclination reached 90.6\u00b0 (Limit: 45.0\u00b0). Cue 'proud chest' and maintain abdominal bracing to reduce lumbar shear forces.",
+        "Bilateral Imbalance: 53.4\u00b0 disparity between left (59.8\u00b0) and right (113.2\u00b0) knee depth. Incorporate unilateral split squats to address limb discrepancy."
+      ]
+    },
+    {
+      "rep_number": 2,
+      "overall_score": 63.2,
+      "depth_score": 100.0,
+      "alignment_score": 25.0,
+      "trunk_score": 35.0,
+      "symmetry_score": 69.4,
+      "tempo_score": 80.0,
+      "depth_category": "Deep (Below Parallel)",
+      "min_knee_angle_deg": 17.4,
+      "max_trunk_lean_deg": 71.0,
+      "peak_valgus_displacement": 0.1437,
+      "knee_asymmetry_deg": 7.6,
+      "eccentric_time_s": 1.67,
+      "concentric_time_s": 1.6,
+      "flags": {
+        "knee_valgus": true,
+        "excessive_forward_lean": true,
+        "shallow_depth": false
+      },
+      "coaching_cues": [
+        "Knee Valgus Detected: Medial collapse measured 0.1437. Engage gluteus medius by cuing 'spread the floor' and tracking knees over second toe.",
+        "Excessive Forward Lean: Torso inclination reached 71.0\u00b0 (Limit: 45.0\u00b0). Cue 'proud chest' and maintain abdominal bracing to reduce lumbar shear forces.",
+        "Bilateral Imbalance: 7.6\u00b0 disparity between left (13.6\u00b0) and right (21.2\u00b0) knee depth. Incorporate unilateral split squats to address limb discrepancy."
+      ]
+    },
+    {
+      "rep_number": 3,
+      "overall_score": 73.6,
+      "depth_score": 100.0,
+      "alignment_score": 25.0,
+      "trunk_score": 81.4,
+      "symmetry_score": 65.6,
+      "tempo_score": 95.0,
+      "depth_category": "Deep (Below Parallel)",
+      "min_knee_angle_deg": 24.3,
+      "max_trunk_lean_deg": 52.4,
+      "peak_valgus_displacement": 0.1579,
+      "knee_asymmetry_deg": 8.6,
+      "eccentric_time_s": 2.1,
+      "concentric_time_s": 1.57,
+      "flags": {
+        "knee_valgus": true,
+        "excessive_forward_lean": true,
+        "shallow_depth": false
+      },
+      "coaching_cues": [
+        "Knee Valgus Detected: Medial collapse measured 0.1579. Engage gluteus medius by cuing 'spread the floor' and tracking knees over second toe.",
+        "Excessive Forward Lean: Torso inclination reached 52.4\u00b0 (Limit: 45.0\u00b0). Cue 'proud chest' and maintain abdominal bracing to reduce lumbar shear forces.",
+        "Bilateral Imbalance: 8.6\u00b0 disparity between left (20.0\u00b0) and right (28.6\u00b0) knee depth. Incorporate unilateral split squats to address limb discrepancy."
+      ]
+    },
+    {
+      "rep_number": 4,
+      "overall_score": 65.6,
+      "depth_score": 100.0,
+      "alignment_score": 25.0,
+      "trunk_score": 47.1,
+      "symmetry_score": 69.2,
+      "tempo_score": 80.0,
+      "depth_category": "Deep (Below Parallel)",
+      "min_knee_angle_deg": 17.4,
+      "max_trunk_lean_deg": 66.2,
+      "peak_valgus_displacement": 0.1453,
+      "knee_asymmetry_deg": 7.7,
+      "eccentric_time_s": 1.94,
+      "concentric_time_s": 1.74,
+      "flags": {
+        "knee_valgus": true,
+        "excessive_forward_lean": true,
+        "shallow_depth": false
+      },
+      "coaching_cues": [
+        "Knee Valgus Detected: Medial collapse measured 0.1453. Engage gluteus medius by cuing 'spread the floor' and tracking knees over second toe.",
+        "Excessive Forward Lean: Torso inclination reached 66.2\u00b0 (Limit: 45.0\u00b0). Cue 'proud chest' and maintain abdominal bracing to reduce lumbar shear forces.",
+        "Bilateral Imbalance: 7.7\u00b0 disparity between left (13.6\u00b0) and right (21.3\u00b0) knee depth. Incorporate unilateral split squats to address limb discrepancy."
+      ]
+    },
+    {
+      "rep_number": 5,
+      "overall_score": 57.3,
+      "depth_score": 100.0,
+      "alignment_score": 25.0,
+      "trunk_score": 0.0,
+      "symmetry_score": 80.0,
+      "tempo_score": 80.0,
+      "depth_category": "Deep (Below Parallel)",
+      "min_knee_angle_deg": 11.7,
+      "max_trunk_lean_deg": 95.7,
+      "peak_valgus_displacement": 0.1355,
+      "knee_asymmetry_deg": 5.0,
+      "eccentric_time_s": 2.27,
+      "concentric_time_s": 9.61,
+      "flags": {
+        "knee_valgus": true,
+        "excessive_forward_lean": true,
+        "shallow_depth": false
+      },
+      "coaching_cues": [
+        "Knee Valgus Detected: Medial collapse measured 0.1355. Engage gluteus medius by cuing 'spread the floor' and tracking knees over second toe.",
+        "Excessive Forward Lean: Torso inclination reached 95.7\u00b0 (Limit: 45.0\u00b0). Cue 'proud chest' and maintain abdominal bracing to reduce lumbar shear forces."
+      ]
+    }
+  ],
+  "artifacts": {
+    "telemetry_chart": "C:\\Users\\nicoc\\Downloads\\data-science-portfolio\\projects\\03-biomechanics-computer-vision\\outputs\\kinematic_telemetry_report.png",
+    "radar_chart": "C:\\Users\\nicoc\\Downloads\\data-science-portfolio\\projects\\03-biomechanics-computer-vision\\outputs\\biomechanical_radar_profile.png",
+    "annotated_video": "C:\\Users\\nicoc\\Downloads\\data-science-portfolio\\projects\\03-biomechanics-computer-vision\\outputs\\annotated_squat_analysis.mp4"
+  }
+}
