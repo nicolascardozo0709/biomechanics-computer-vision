@@ -1,0 +1,67 @@
+{
+  "metadata": {
+    "source": "C:\\Users\\nicoc\\Downloads\\data-science-portfolio\\projects\\03-biomechanics-computer-vision\\data\\sample_squat_benchmark.mp4",
+    "total_frames": 180,
+    "fps": 30.0,
+    "duration_s": 5.97,
+    "total_reps_detected": 2,
+    "composite_mean_score": 87.9
+  },
+  "repetitions": [
+    {
+      "rep_number": 1,
+      "overall_score": 98.0,
+      "depth_score": 100.0,
+      "alignment_score": 100.0,
+      "trunk_score": 100.0,
+      "symmetry_score": 100.0,
+      "tempo_score": 80.0,
+      "depth_category": "Deep (Below Parallel)",
+      "min_knee_angle_deg": 74.0,
+      "max_trunk_lean_deg": 22.0,
+      "peak_valgus_displacement": 0.0,
+      "knee_asymmetry_deg": 0.0,
+      "eccentric_time_s": 1.03,
+      "concentric_time_s": 1.03,
+      "flags": {
+        "knee_valgus": false,
+        "excessive_forward_lean": false,
+        "shallow_depth": false
+      },
+      "coaching_cues": [
+        "Optimal Kinematics: Excellent depth, neutral spinal alignment, and solid knee tracking."
+      ]
+    },
+    {
+      "rep_number": 2,
+      "overall_score": 77.8,
+      "depth_score": 65.0,
+      "alignment_score": 82.0,
+      "trunk_score": 82.5,
+      "symmetry_score": 100.0,
+      "tempo_score": 80.0,
+      "depth_category": "Borderline / Slightly High",
+      "min_knee_angle_deg": 103.2,
+      "max_trunk_lean_deg": 52.0,
+      "peak_valgus_displacement": 0.035,
+      "knee_asymmetry_deg": 0.0,
+      "eccentric_time_s": 0.97,
+      "concentric_time_s": 0.97,
+      "flags": {
+        "knee_valgus": true,
+        "excessive_forward_lean": true,
+        "shallow_depth": true
+      },
+      "coaching_cues": [
+        "Depth Alert: Achieved 103.2\u00b0 knee flexion (Threshold: <=95.0\u00b0). Work on ankle dorsiflexion mobility or elevate heels slightly.",
+        "Knee Valgus Detected: Medial collapse measured 0.0350. Engage gluteus medius by cuing 'spread the floor' and tracking knees over second toe.",
+        "Excessive Forward Lean: Torso inclination reached 52.0\u00b0 (Limit: 45.0\u00b0). Cue 'proud chest' and maintain abdominal bracing to reduce lumbar shear forces."
+      ]
+    }
+  ],
+  "artifacts": {
+    "telemetry_chart": "C:\\Users\\nicoc\\Downloads\\data-science-portfolio\\projects\\03-biomechanics-computer-vision\\outputs\\kinematic_telemetry_report.png",
+    "radar_chart": "C:\\Users\\nicoc\\Downloads\\data-science-portfolio\\projects\\03-biomechanics-computer-vision\\outputs\\biomechanical_radar_profile.png",
+    "annotated_video": "C:\\Users\\nicoc\\Downloads\\data-science-portfolio\\projects\\03-biomechanics-computer-vision\\outputs\\annotated_squat_analysis.mp4"
+  }
+}

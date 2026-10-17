@@ -84,11 +84,11 @@ async def get_benchmark_analysis() -> dict[str, Any]:
     Execute high-precision 2-rep benchmark kinematic analysis
     (Rep 1: Pristine Olympic Deep Squat vs. Rep 2: Valgus & Forward Pitch Flaws).
     """
-    report_json = OUTPUT_DIR / "biomechanical_report.json"
-    if not report_json.exists():
+    benchmark_json = OUTPUT_DIR / "benchmark_report.json"
+    if not benchmark_json.exists():
         results = run_pipeline(use_benchmark=True, output_dir=OUTPUT_DIR, save_video=True)
     else:
-        with open(report_json, "r", encoding="utf-8") as f:
+        with open(benchmark_json, "r", encoding="utf-8") as f:
             results = json.load(f)
 
     return {

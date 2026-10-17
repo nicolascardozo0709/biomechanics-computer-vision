@@ -40,6 +40,46 @@ from src.visualization.biomechanics_renderer import BiomechanicsRenderer
 from src.visualization.kinematic_plots import plot_kinematic_telemetry, plot_radar_profile
 
 
+def interpolate_landmarks_sequence(
+    raw_landmarks: list[dict[str, np.ndarray] | None],
+    max_gap: int = 6
+) -> list[dict[str, np.ndarray] | None]:
+    """
+    Interpolate missing 3D landmarks for short occlusion gaps up to max_gap frames (~200ms).
+    Gaps larger than max_gap (e.g. subject outside frame) remain None to prevent phantom skeleton artifacts.
+    """
+    n = len(raw_landmarks)
+    out: list[dict[str, np.ndarray] | None] = list(raw_landmarks)
+
+    i = 0
+    while i < n:
+        if out[i] is None:
+            gap_start = i
+            while i < n and out[i] is None:
+                i += 1
+            gap_end = i
+            gap_len = gap_end - gap_start
+
+            has_prev = (gap_start > 0 and out[gap_start - 1] is not None)
+            has_next = (gap_end < n and out[gap_end] is not None)
+
+            if has_prev and has_next and gap_len <= max_gap:
+                prev_lm = out[gap_start - 1]
+                next_lm = out[gap_end]
+                if prev_lm is not None and next_lm is not None:
+                    common_keys = [k for k in prev_lm.keys() if k in next_lm]
+                    for j in range(gap_start, gap_end):
+                        alpha = (j - (gap_start - 1)) / float(gap_len + 1)
+                        interp_dict: dict[str, np.ndarray] = {}
+                        for k in common_keys:
+                            interp_dict[k] = (1.0 - alpha) * prev_lm[k] + alpha * next_lm[k]
+                        out[j] = interp_dict
+        else:
+            i += 1
+
+    return out
+
+
 def run_pipeline(
     source_video: str | None = None,
     use_benchmark: bool = False,
@@ -115,11 +155,26 @@ def run_pipeline(
     else:
         detector = PoseDetector()
         loader = VideoLoader(source_path)
+        raw_frames_landmarks: list[dict[str, np.ndarray] | None] = []
+
+        print(f"   -> Processing {num_frames} video frames with MediaPipe Tasks Vision...")
         for idx, t, frame in loader.frames():
-            timestamps.append(t)
             lm = detector.detect_frame(frame)
-            if lm is not None and "left_knee" in lm:
-                processed_landmarks.append(lm)
+            if lm is not None and "left_knee" in lm and "left_hip" in lm and "left_ankle" in lm:
+                raw_frames_landmarks.append(lm)
+            else:
+                raw_frames_landmarks.append(None)
+        loader.close()
+        detector.close()
+
+        # Step 2b: Precise 1:1 Landmark sequence alignment & interpolation
+        processed_landmarks = interpolate_landmarks_sequence(raw_frames_landmarks, max_gap=6)
+
+        # Step 2c: Frame-synchronized joint kinematics extraction (strictly len == num_frames)
+        for idx in range(len(processed_landmarks)):
+            timestamps.append(float(idx / fps))
+            lm = processed_landmarks[idx]
+            if lm is not None and "left_knee" in lm and "left_hip" in lm and "left_ankle" in lm:
                 k_l = calculate_angle_3d(lm["left_hip"], lm["left_knee"], lm["left_ankle"])
                 k_r = calculate_angle_3d(lm["right_hip"], lm["right_knee"], lm["right_ankle"])
                 trunk = calculate_trunk_inclination(lm["left_shoulder"], lm["left_hip"])
@@ -132,14 +187,11 @@ def run_pipeline(
                 left_valgus_raw.append(v_l["medial_displacement"])
                 right_valgus_raw.append(v_r["medial_displacement"])
             else:
-                # Interpolate or hold previous
                 left_knee_raw.append(left_knee_raw[-1] if left_knee_raw else 180.0)
                 right_knee_raw.append(right_knee_raw[-1] if right_knee_raw else 180.0)
                 trunk_raw.append(trunk_raw[-1] if trunk_raw else 0.0)
                 left_valgus_raw.append(left_valgus_raw[-1] if left_valgus_raw else 0.0)
                 right_valgus_raw.append(right_valgus_raw[-1] if right_valgus_raw else 0.0)
-        loader.close()
-        detector.close()
 
     # Convert to NumPy
     time_arr = np.array(timestamps, dtype=np.float64)
@@ -297,6 +349,12 @@ def run_pipeline(
     with open(report_json_path, "w", encoding="utf-8") as f:
         json.dump(summary_report, f, indent=2)
     print(f"   [OK] Summary JSON saved to: {report_json_path}")
+
+    if use_benchmark:
+        benchmark_json_path = out_path / "benchmark_report.json"
+        with open(benchmark_json_path, "w", encoding="utf-8") as f:
+            json.dump(summary_report, f, indent=2)
+        print(f"   [OK] Benchmark JSON saved to: {benchmark_json_path}")
 
     # Print Terminal Executive Summary
     print("\n" + "-" * 70)

@@ -50,9 +50,9 @@ class BiomechanicsRenderer:
 
         # Check required landmarks
         req_keys = ["left_shoulder", "right_shoulder", "left_hip", "right_hip", "left_knee", "right_knee", "left_ankle", "right_ankle"]
-        has_all = all(k in landmarks for k in req_keys)
+        has_all = landmarks is not None and all(k in landmarks for k in req_keys)
 
-        if has_all:
+        if has_all and landmarks is not None:
             s_l, s_r = to_px(landmarks["left_shoulder"]), to_px(landmarks["right_shoulder"])
             h_l, h_r = to_px(landmarks["left_hip"]), to_px(landmarks["right_hip"])
             k_l, k_r = to_px(landmarks["left_knee"]), to_px(landmarks["right_knee"])
@@ -119,7 +119,10 @@ class BiomechanicsRenderer:
         cv2.putText(canvas, depth_status, (390, 52), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (255, 255, 255), 2, cv2.LINE_AA)
 
         # Deviation Badges on Top Right
-        if metrics.get("valgus_alert", False):
+        if not has_all:
+            cv2.rectangle(canvas, (w - 180, 18), (w - 16, 52), (30, 40, 55), -1)
+            cv2.putText(canvas, "TRACKING POSE...", (w - 170, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.48, (160, 180, 200), 1, cv2.LINE_AA)
+        elif metrics.get("valgus_alert", False):
             cv2.rectangle(canvas, (w - 210, 15), (w - 16, 55), (30, 40, 200), -1)
             cv2.putText(canvas, "! KNEE VALGUS", (w - 195, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 2, cv2.LINE_AA)
         else:

@@ -3,3 +3,4 @@ __pycache__/
 .pytest_cache/
 *.task
 .DS_Store
+data/upload_*
