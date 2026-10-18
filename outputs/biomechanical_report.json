@@ -1,74 +1,164 @@
 {
   "metadata": {
-    "source": "C:\\Users\\nicoc\\Downloads\\data-science-portfolio\\projects\\03-biomechanics-computer-vision\\data\\sample_squat_benchmark.mp4",
-    "viewpoint": "frontal",
-    "dominant_side": "bilateral",
-    "total_frames": 180,
-    "fps": 30.0,
-    "duration_s": 5.97,
-    "total_reps_detected": 2,
-    "composite_mean_score": 91.0
+    "source": "data/upload_WhatsApp Video 2026-10-16 at 19.10.02.mp4",
+    "viewpoint": "sagittal",
+    "dominant_side": "left",
+    "total_frames": 1519,
+    "fps": 29.960552268244577,
+    "duration_s": 50.67,
+    "total_reps_detected": 5,
+    "composite_mean_score": 99.0
   },
   "repetitions": [
     {
       "rep_number": 1,
-      "overall_score": 98.5,
+      "overall_score": 99.0,
       "depth_score": 100.0,
       "alignment_score": 100.0,
       "trunk_score": 100.0,
       "symmetry_score": 100.0,
-      "tempo_score": 85.0,
+      "tempo_score": 95.0,
       "depth_category": "Deep (Below Parallel)",
-      "min_knee_angle_deg": 74.0,
-      "max_trunk_lean_deg": 0.0,
+      "min_knee_angle_deg": 39.3,
+      "max_trunk_lean_deg": 33.8,
       "peak_valgus_displacement": 0.0,
       "knee_asymmetry_deg": 0.0,
-      "eccentric_time_s": 1.0,
-      "concentric_time_s": 1.0,
+      "eccentric_time_s": 1.9,
+      "concentric_time_s": 1.17,
       "flags": {
         "knee_valgus": false,
         "excessive_forward_lean": false,
         "shallow_depth": false
       },
       "coaching_cues": [
-        "Optimal Kinematics: Excellent depth, neutral spinal alignment, and solid knee tracking."
+        "Excelente Cinem\u00e1tica Sagital: Profundidad completa (39.3\u00b0) con torso erguido (33.8\u00b0) y cadencia controlada."
       ],
-      "start_frame": 20,
-      "bottom_frame": 50,
-      "end_frame": 80,
-      "start_time_s": 0.67,
-      "bottom_time_s": 1.67,
-      "end_time_s": 2.67
+      "start_frame": 507,
+      "bottom_frame": 564,
+      "end_frame": 599,
+      "start_time_s": 16.92,
+      "bottom_time_s": 18.82,
+      "end_time_s": 19.99
     },
     {
       "rep_number": 2,
-      "overall_score": 83.5,
-      "depth_score": 70.0,
-      "alignment_score": 82.0,
+      "overall_score": 99.0,
+      "depth_score": 100.0,
+      "alignment_score": 100.0,
       "trunk_score": 100.0,
       "symmetry_score": 100.0,
-      "tempo_score": 85.0,
-      "depth_category": "Borderline / Slightly High",
-      "min_knee_angle_deg": 103.2,
-      "max_trunk_lean_deg": 0.0,
-      "peak_valgus_displacement": 0.035,
+      "tempo_score": 95.0,
+      "depth_category": "Deep (Below Parallel)",
+      "min_knee_angle_deg": 39.5,
+      "max_trunk_lean_deg": 26.6,
+      "peak_valgus_displacement": 0.0,
       "knee_asymmetry_deg": 0.0,
-      "eccentric_time_s": 0.93,
-      "concentric_time_s": 0.93,
+      "eccentric_time_s": 1.94,
+      "concentric_time_s": 1.4,
       "flags": {
-        "knee_valgus": true,
+        "knee_valgus": false,
         "excessive_forward_lean": false,
         "shallow_depth": false
       },
       "coaching_cues": [
-        "Knee Valgus Detected: Medial collapse measured 0.0350. Engage gluteus medius by cuing 'spread the floor' and tracking knees over second toe."
+        "Excelente Cinem\u00e1tica Sagital: Profundidad completa (39.5\u00b0) con torso erguido (26.6\u00b0) y cadencia controlada."
       ],
-      "start_frame": 107,
-      "bottom_frame": 135,
-      "end_frame": 163,
-      "start_time_s": 3.57,
-      "bottom_time_s": 4.5,
-      "end_time_s": 5.43
+      "start_frame": 657,
+      "bottom_frame": 715,
+      "end_frame": 757,
+      "start_time_s": 21.93,
+      "bottom_time_s": 23.86,
+      "end_time_s": 25.27
+    },
+    {
+      "rep_number": 3,
+      "overall_score": 99.0,
+      "depth_score": 100.0,
+      "alignment_score": 100.0,
+      "trunk_score": 100.0,
+      "symmetry_score": 100.0,
+      "tempo_score": 95.0,
+      "depth_category": "Deep (Below Parallel)",
+      "min_knee_angle_deg": 35.0,
+      "max_trunk_lean_deg": 24.6,
+      "peak_valgus_displacement": 0.0,
+      "knee_asymmetry_deg": 0.0,
+      "eccentric_time_s": 1.7,
+      "concentric_time_s": 1.2,
+      "flags": {
+        "knee_valgus": false,
+        "excessive_forward_lean": false,
+        "shallow_depth": false
+      },
+      "coaching_cues": [
+        "Excelente Cinem\u00e1tica Sagital: Profundidad completa (35.0\u00b0) con torso erguido (24.6\u00b0) y cadencia controlada."
+      ],
+      "start_frame": 918,
+      "bottom_frame": 969,
+      "end_frame": 1005,
+      "start_time_s": 30.64,
+      "bottom_time_s": 32.34,
+      "end_time_s": 33.54
+    },
+    {
+      "rep_number": 4,
+      "overall_score": 99.0,
+      "depth_score": 100.0,
+      "alignment_score": 100.0,
+      "trunk_score": 100.0,
+      "symmetry_score": 100.0,
+      "tempo_score": 95.0,
+      "depth_category": "Deep (Below Parallel)",
+      "min_knee_angle_deg": 32.8,
+      "max_trunk_lean_deg": 26.1,
+      "peak_valgus_displacement": 0.0,
+      "knee_asymmetry_deg": 0.0,
+      "eccentric_time_s": 2.1,
+      "concentric_time_s": 1.1,
+      "flags": {
+        "knee_valgus": false,
+        "excessive_forward_lean": false,
+        "shallow_depth": false
+      },
+      "coaching_cues": [
+        "Excelente Cinem\u00e1tica Sagital: Profundidad completa (32.8\u00b0) con torso erguido (26.1\u00b0) y cadencia controlada."
+      ],
+      "start_frame": 1126,
+      "bottom_frame": 1189,
+      "end_frame": 1222,
+      "start_time_s": 37.58,
+      "bottom_time_s": 39.69,
+      "end_time_s": 40.79
+    },
+    {
+      "rep_number": 5,
+      "overall_score": 99.0,
+      "depth_score": 100.0,
+      "alignment_score": 100.0,
+      "trunk_score": 100.0,
+      "symmetry_score": 100.0,
+      "tempo_score": 95.0,
+      "depth_category": "Deep (Below Parallel)",
+      "min_knee_angle_deg": 36.2,
+      "max_trunk_lean_deg": 25.7,
+      "peak_valgus_displacement": 0.0,
+      "knee_asymmetry_deg": 0.0,
+      "eccentric_time_s": 1.57,
+      "concentric_time_s": 0.7,
+      "flags": {
+        "knee_valgus": false,
+        "excessive_forward_lean": false,
+        "shallow_depth": false
+      },
+      "coaching_cues": [
+        "Excelente Cinem\u00e1tica Sagital: Profundidad completa (36.2\u00b0) con torso erguido (25.7\u00b0) y cadencia controlada."
+      ],
+      "start_frame": 1308,
+      "bottom_frame": 1355,
+      "end_frame": 1376,
+      "start_time_s": 43.66,
+      "bottom_time_s": 45.23,
+      "end_time_s": 45.93
     }
   ],
   "artifacts": {

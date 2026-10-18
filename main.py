@@ -348,16 +348,19 @@ def run_pipeline(
         }
     }
 
-    report_json_path = out_path / "biomechanical_report.json"
-    with open(report_json_path, "w", encoding="utf-8") as f:
-        json.dump(summary_report, f, indent=2)
-    print(f"   [OK] Summary JSON saved to: {report_json_path}")
-
     if use_benchmark:
         benchmark_json_path = out_path / "benchmark_report.json"
         with open(benchmark_json_path, "w", encoding="utf-8") as f:
             json.dump(summary_report, f, indent=2)
         print(f"   [OK] Benchmark JSON saved to: {benchmark_json_path}")
+        if not (out_path / "biomechanical_report.json").exists():
+            with open(out_path / "biomechanical_report.json", "w", encoding="utf-8") as f:
+                json.dump(summary_report, f, indent=2)
+    else:
+        report_json_path = out_path / "biomechanical_report.json"
+        with open(report_json_path, "w", encoding="utf-8") as f:
+            json.dump(summary_report, f, indent=2)
+        print(f"   [OK] Summary JSON saved to: {report_json_path}")
 
     # Print Terminal Executive Summary
     print("\n" + "-" * 70)
