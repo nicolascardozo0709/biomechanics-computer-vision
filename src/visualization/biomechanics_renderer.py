@@ -73,7 +73,66 @@ class BiomechanicsRenderer:
             ft_l = to_px(landmarks["left_foot_index"]) if "left_foot_index" in landmarks else None
             ft_r = to_px(landmarks["right_foot_index"]) if "right_foot_index" in landmarks else None
 
-            if viewpoint == "sagittal":
+            exercise = metrics.get("exercise", "squat")
+
+            if exercise == "pushup":
+                # Push-Up Biomechanical MoCap Visualization
+                if dominant_side == "right":
+                    n_s, n_e, n_w = s_r, e_r, w_r
+                    n_h, n_k, n_a = h_r, k_r, a_r
+                    f_s, f_e, f_w = s_l, e_l, w_l
+                    f_h, f_k, f_a = h_l, k_l, a_l
+                else:
+                    n_s, n_e, n_w = s_l, e_l, w_l
+                    n_h, n_k, n_a = h_l, k_l, a_l
+                    f_s, f_e, f_w = s_r, e_r, w_r
+                    f_h, f_k, f_a = h_r, k_r, a_r
+
+                # Far occluded limb in faint dark steel
+                if f_e is not None and f_w is not None:
+                    cv2.line(canvas, f_s, f_e, (50, 60, 75), 2, cv2.LINE_AA)
+                    cv2.line(canvas, f_e, f_w, (50, 60, 75), 2, cv2.LINE_AA)
+                cv2.line(canvas, f_s, f_h, (50, 60, 75), 2, cv2.LINE_AA)
+                cv2.line(canvas, f_h, f_k, (50, 60, 75), 2, cv2.LINE_AA)
+                cv2.line(canvas, f_k, f_a, (50, 60, 75), 2, cv2.LINE_AA)
+
+                elbow_angle = metrics.get("elbow_angle", 180.0)
+                plank_angle = metrics.get("plank_angle", 180.0)
+
+                # Color coding
+                arm_color = self.color_safe if elbow_angle <= 92.0 else self.color_accent
+                plank_color = self.color_safe if plank_angle >= 165.0 else self.color_danger
+
+                # Near Arm
+                if n_e is not None and n_w is not None:
+                    cv2.line(canvas, n_s, n_e, arm_color, 4, cv2.LINE_AA)
+                    cv2.line(canvas, n_e, n_w, arm_color, 4, cv2.LINE_AA)
+                    cv2.circle(canvas, n_w, 7, (255, 255, 255), -1, cv2.LINE_AA)
+                    cv2.circle(canvas, n_e, 7, (255, 255, 255), -1, cv2.LINE_AA)
+                    cv2.circle(canvas, n_e, 5, arm_color, -1, cv2.LINE_AA)
+
+                    # Elbow Angle Badge
+                    e_label_pt = (n_e[0] - 10, n_e[1] - 22)
+                    cv2.rectangle(canvas, (e_label_pt[0] - 4, e_label_pt[1] - 16), (e_label_pt[0] + 88, e_label_pt[1] + 8), (12, 16, 24), -1)
+                    cv2.rectangle(canvas, (e_label_pt[0] - 4, e_label_pt[1] - 16), (e_label_pt[0] + 88, e_label_pt[1] + 8), arm_color, 1)
+                    cv2.putText(canvas, f"Elbow:{elbow_angle:.1f}\xb0", (e_label_pt[0] + 2, e_label_pt[1] + 2), cv2.FONT_HERSHEY_SIMPLEX, 0.48, arm_color, 1, cv2.LINE_AA)
+
+                # Rigid Core Plank Line
+                cv2.line(canvas, n_s, n_h, plank_color, 4, cv2.LINE_AA)
+                cv2.line(canvas, n_h, n_k, plank_color, 4, cv2.LINE_AA)
+                cv2.line(canvas, n_k, n_a, plank_color, 4, cv2.LINE_AA)
+
+                for pt in [n_s, n_h, n_k, n_a]:
+                    cv2.circle(canvas, pt, 7, (255, 255, 255), -1, cv2.LINE_AA)
+                    cv2.circle(canvas, pt, 5, self.color_accent, -1, cv2.LINE_AA)
+
+                # Plank Core Alignment Badge at Hip
+                h_label_pt = (n_h[0] + 16, n_h[1] - 16)
+                cv2.rectangle(canvas, (h_label_pt[0] - 4, h_label_pt[1] - 16), (h_label_pt[0] + 96, h_label_pt[1] + 8), (12, 16, 24), -1)
+                cv2.rectangle(canvas, (h_label_pt[0] - 4, h_label_pt[1] - 16), (h_label_pt[0] + 96, h_label_pt[1] + 8), plank_color, 1)
+                cv2.putText(canvas, f"Plank:{plank_angle:.1f}\xb0", (h_label_pt[0] + 2, h_label_pt[1] + 2), cv2.FONT_HERSHEY_SIMPLEX, 0.48, plank_color, 1, cv2.LINE_AA)
+
+            elif viewpoint == "sagittal":
                 # Determine near (camera-facing) and far (occluded) limbs
                 if dominant_side == "left":
                     n_s, n_h, n_k, n_a = s_l, h_l, k_l, a_l
@@ -180,9 +239,16 @@ class BiomechanicsRenderer:
         # HUD Content
         rep_count = metrics.get("rep_count", 0)
         phase_str = metrics.get("phase", "CALIBRATING").upper()
-        depth_status = metrics.get("depth_status", "STANDING")
+        depth_status = metrics.get("depth_status", "ACTIVE")
+        exercise = metrics.get("exercise", "squat")
 
-        hud_title = f"SAGITTAL VIEW ({dominant_side.upper()})" if viewpoint == "sagittal" else "AI BIOMECHANICS ENGINE"
+        if exercise == "pushup":
+            hud_title = f"PUSH-UP ({dominant_side.upper()})"
+        elif viewpoint == "sagittal":
+            hud_title = f"SQUAT ({dominant_side.upper()})"
+        else:
+            hud_title = "SQUAT (FRONTAL)"
+
         cv2.putText(canvas, hud_title, (16, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.48, (140, 160, 185), 1, cv2.LINE_AA)
         cv2.putText(canvas, f"REPETITIONS: {rep_count}", (16, 52), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (255, 255, 255), 2, cv2.LINE_AA)
 
@@ -196,6 +262,16 @@ class BiomechanicsRenderer:
         if not has_all:
             cv2.rectangle(canvas, (w - 180, 18), (w - 16, 52), (30, 40, 55), -1)
             cv2.putText(canvas, "TRACKING POSE...", (w - 170, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.48, (160, 180, 200), 1, cv2.LINE_AA)
+        elif exercise == "pushup":
+            if depth_status in ("DEEP", "CHEST-TO-FLOOR", "MILITARY STANDARD"):
+                cv2.rectangle(canvas, (w - 190, 18), (w - 16, 52), (25, 45, 30), -1)
+                cv2.putText(canvas, "\u2713 FULL DEPTH", (w - 175, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.52, (100, 240, 140), 1, cv2.LINE_AA)
+            elif metrics.get("hip_sag", False):
+                cv2.rectangle(canvas, (w - 180, 18), (w - 16, 52), (30, 40, 200), -1)
+                cv2.putText(canvas, "! HIP SAG", (w - 165, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.52, (255, 255, 255), 1, cv2.LINE_AA)
+            else:
+                cv2.rectangle(canvas, (w - 180, 18), (w - 16, 52), (30, 40, 55), -1)
+                cv2.putText(canvas, "PLANK ACTIVE", (w - 165, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.50, (180, 200, 220), 1, cv2.LINE_AA)
         elif viewpoint == "sagittal":
             if depth_status == "BELOW PARALLEL":
                 cv2.rectangle(canvas, (w - 190, 18), (w - 16, 52), (25, 45, 30), -1)

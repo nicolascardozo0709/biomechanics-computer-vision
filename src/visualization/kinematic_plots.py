@@ -106,6 +106,88 @@ def plot_kinematic_telemetry(
     return output_path
 
 
+def plot_pushup_telemetry(
+    timestamps: np.ndarray,
+    elbow_angles: np.ndarray,
+    plank_angles: np.ndarray,
+    angular_velocity: np.ndarray,
+    reps: list[dict[str, Any]],
+    output_path: Path | str
+) -> Path:
+    """
+    Generate a 3-panel publication-grade telemetry report specifically for Push-Up kinematics:
+    1. Elbow Flexion & Lockout Dynamics
+    2. Core Plank & Spinal Neutrality (Shoulder-Hip-Ankle collinearity)
+    3. Instantaneous Angular Velocity Profile
+    """
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    plt.style.use("dark_background")
+    fig, axes = plt.subplots(3, 1, figsize=(14, 10), sharex=True, dpi=300)
+    fig.patch.set_facecolor("#0F1319")
+
+    for ax in axes:
+        ax.set_facecolor("#161B24")
+        ax.grid(True, linestyle="--", alpha=0.25, color="#5B6B82")
+        ax.tick_params(colors="#A0B0C4", labelsize=9)
+        for spine in ax.spines.values():
+            spine.set_color("#2A3444")
+
+    if len(timestamps) == 0:
+        for ax in axes:
+            ax.text(0.5, 0.5, "NO LANDMARKS / MOVEMENT DETECTED", ha="center", va="center", color="#EF4444", fontsize=12, fontweight="bold")
+        plt.tight_layout()
+        fig.savefig(str(output_path), dpi=300, facecolor=fig.get_facecolor(), edgecolor="none")
+        plt.close(fig)
+        return output_path
+
+    time = timestamps
+
+    # 1. Panel 1: Elbow Flexion & Lockout
+    ax1 = axes[0]
+    ax1.plot(time, elbow_angles, label="Elbow Flexion (θ)", color="#00E5FF", linewidth=2.2)
+    ax1.axhline(90.0, color="#00E676", linestyle="--", linewidth=1.5, label="Military Standard Depth (90°)")
+    ax1.axhline(160.0, color="#FFD600", linestyle=":", linewidth=1.5, label="Full Lockout Threshold (160°)")
+    ax1.set_ylabel("Elbow Angle (°)", fontsize=10, fontweight="bold", color="#E0E6ED")
+    ax1.set_title("AI PUSH-UP BIOMECHANICAL KINEMATICS REPORT", fontsize=13, fontweight="bold", pad=12, color="#FFFFFF")
+    ax1.legend(loc="upper right", framealpha=0.85, facecolor="#1F2633", edgecolor="#2A3444", fontsize=8.5)
+
+    for r in reps:
+        t_start = time[min(r["start_frame"], len(time) - 1)]
+        t_bottom = time[min(r["bottom_frame"], len(time) - 1)]
+        t_end = time[min(r["end_frame"], len(time) - 1)]
+        ax1.axvspan(t_start, t_bottom, color="#00E5FF", alpha=0.08)
+        ax1.axvspan(t_bottom, t_end, color="#00E676", alpha=0.08)
+        depth_val = r.get("min_elbow_angle", r.get("min_knee_angle", 0.0))
+        ax1.text(t_bottom, depth_val - 8, f"Rep {r['rep_number']}: {depth_val}°",
+                 color="#FFFFFF", fontsize=8, ha="center", weight="bold",
+                 bbox=dict(boxstyle="round,pad=0.2", facecolor="#1A2230", edgecolor="#00E5FF", alpha=0.9))
+
+    # 2. Panel 2: Plank & Core Alignment (Shoulder - Hip - Ankle)
+    ax2 = axes[1]
+    ax2.plot(time, plank_angles, color="#7C4DFF", linewidth=2.0, label="Plank Collinearity (Shoulder-Hip-Ankle)")
+    ax2.axhline(180.0, color="#00E676", linestyle="--", linewidth=1.2, label="Ideal Straight Plank (180°)")
+    ax2.axhline(160.0, color="#FF3D71", linestyle=":", linewidth=1.5, label="Hip Sag Alert Threshold (<160°)")
+    ax2.fill_between(time, 0.0, 160.0, where=(plank_angles < 160.0), color="#FF3D71", alpha=0.20, label="Sagging Core Region")
+    ax2.set_ylim(min(120.0, np.min(plank_angles) - 5), 190.0)
+    ax2.set_ylabel("Plank Angle (°)", fontsize=10, fontweight="bold", color="#E0E6ED")
+    ax2.legend(loc="upper right", framealpha=0.85, facecolor="#1F2633", edgecolor="#2A3444", fontsize=8.5)
+
+    # 3. Panel 3: Angular Velocity
+    ax3 = axes[2]
+    ax3.plot(time, angular_velocity, color="#FF9100", linewidth=1.8, label="Elbow Velocity (ω = dθ/dt)")
+    ax3.axhline(0.0, color="#607289", linestyle="-", linewidth=1.0)
+    ax3.set_ylabel("Velocity (°/s)", fontsize=10, fontweight="bold", color="#E0E6ED")
+    ax3.set_xlabel("Time (seconds)", fontsize=10, fontweight="bold", color="#E0E6ED")
+    ax3.legend(loc="upper right", framealpha=0.85, facecolor="#1F2633", edgecolor="#2A3444", fontsize=8.5)
+
+    plt.tight_layout()
+    fig.savefig(str(output_path), dpi=300, facecolor=fig.get_facecolor(), edgecolor="none")
+    plt.close(fig)
+    return output_path
+
+
 def plot_radar_profile(
     rep_evaluations: list[dict[str, Any]],
     output_path: Path | str

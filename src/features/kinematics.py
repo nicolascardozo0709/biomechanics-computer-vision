@@ -387,3 +387,156 @@ def interpolate_landmarks_sequence(
 
     return out
 
+
+def calculate_pushup_elbow_angle(
+    shoulder: np.ndarray,
+    elbow: np.ndarray,
+    wrist: np.ndarray,
+    width: float = 1.0,
+    height: float = 1.0
+) -> float:
+    """
+    Calculate 2D isotropic elbow flexion/extension angle.
+    At full lockout extension, angle approaches 160-180°.
+    At bottom chest-to-floor depth, angle drops to <= 90°.
+    """
+    return calculate_isotropic_angle(shoulder, elbow, wrist, width=width, height=height)
+
+
+def calculate_plank_alignment(
+    shoulder: np.ndarray,
+    hip: np.ndarray,
+    ankle_or_knee: np.ndarray,
+    width: float = 1.0,
+    height: float = 1.0
+) -> float:
+    """
+    Calculate core and spinal collinearity angle across Shoulder -> Hip -> Ankle/Knee.
+    A rigid neutral plank yields ~170-180°.
+    Sagging hips (hyperextension) or piked hips (tenting) decrease this angle below 160°.
+    """
+    return calculate_isotropic_angle(shoulder, hip, ankle_or_knee, width=width, height=height)
+
+
+def detect_exercise_type(
+    landmarks_list: list[dict[str, np.ndarray] | None]
+) -> str:
+    """
+    Automatically classify whether the performed exercise is a 'squat' or 'pushup'
+    based on the primary orientation of the torso and body relative to gravity.
+
+    Returns:
+        'squat' | 'pushup'
+    """
+    pushup_votes = 0
+    total_valid = 0
+
+    for lm in landmarks_list:
+        if lm is None:
+            continue
+
+        # Check shoulder and hip coordinates
+        s = None
+        h = None
+        if "left_shoulder" in lm and "left_hip" in lm:
+            s, h = lm["left_shoulder"], lm["left_hip"]
+        elif "right_shoulder" in lm and "right_hip" in lm:
+            s, h = lm["right_shoulder"], lm["right_hip"]
+
+        if s is not None and h is not None:
+            total_valid += 1
+            dx = abs(s[0] - h[0])
+            dy = abs(s[1] - h[1])
+
+            # In pushups, horizontal span dx is greater than or comparable to vertical dy
+            # In squats, upright torso has dy significantly larger than dx
+            if dx > dy * 0.85:
+                pushup_votes += 1
+
+    if total_valid == 0:
+        return "squat"
+
+    ratio = pushup_votes / float(total_valid)
+    return "pushup" if ratio >= 0.45 else "squat"
+
+
+def segment_pushup_phases(
+    elbow_angles: np.ndarray,
+    fps: float = 30.0,
+    lockout_threshold: float = 150.0,
+    bottom_threshold: float = 115.0
+) -> list[dict[str, Any]]:
+    """
+    Segment continuous push-up time-series into repetitions and movement phases:
+    1. Eccentric (Descent towards floor)
+    2. Isometric (Deep Chest Inflection)
+    3. Concentric (Ascent towards Lockout)
+
+    Parameters:
+        elbow_angles: Filtered elbow angle series over time.
+        fps: Recording frame rate.
+        lockout_threshold: Angle indicating full arm extension (typically 150-165°).
+        bottom_threshold: Minimum flexion required to count as valid attempt (<= 110°).
+
+    Returns:
+        List of push-up repetition metadata dictionaries.
+    """
+    reps: list[dict[str, Any]] = []
+    n = len(elbow_angles)
+    if n < 15:
+        return reps
+
+    in_rep = False
+    start_frame = 0
+    min_angle = 180.0
+    min_frame = 0
+
+    for i in range(n):
+        angle = elbow_angles[i]
+
+        if not in_rep:
+            # Trigger rep start when elbow flexes below lockout with negative velocity
+            if angle < lockout_threshold and (i > 0 and elbow_angles[i] < elbow_angles[i - 1]):
+                in_rep = True
+                start_frame = max(0, i - 1)
+                min_angle = angle
+                min_frame = i
+        else:
+            if angle < min_angle:
+                min_angle = angle
+                min_frame = i
+
+            # Rep ends when athlete pushes back up to lockout
+            if angle >= lockout_threshold:
+                end_frame = i
+                # Check valid depth and duration
+                if (
+                    35.0 <= min_angle <= bottom_threshold
+                    and (end_frame - start_frame) >= int(fps * 0.7)
+                ):
+                    eccentric_frames = max(1, min_frame - start_frame)
+                    concentric_frames = max(1, end_frame - min_frame)
+
+                    eccentric_time = eccentric_frames / fps
+                    concentric_time = concentric_frames / fps
+                    total_time = (end_frame - start_frame) / fps
+
+                    if eccentric_time >= 0.3 and concentric_time >= 0.25:
+                        reps.append({
+                            "rep_number": len(reps) + 1,
+                            "start_frame": int(start_frame),
+                            "bottom_frame": int(min_frame),
+                            "end_frame": int(end_frame),
+                            "min_elbow_angle": round(float(min_angle), 2),
+                            "eccentric_duration_s": round(float(eccentric_time), 2),
+                            "concentric_duration_s": round(float(concentric_time), 2),
+                            "total_duration_s": round(float(total_time), 2),
+                            "tempo_ratio": round(float(eccentric_time / max(concentric_time, 0.05)), 2)
+                        })
+
+                in_rep = False
+                min_angle = 180.0
+
+    return reps
+
+

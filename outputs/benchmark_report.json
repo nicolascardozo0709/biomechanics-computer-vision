@@ -1,6 +1,7 @@
 {
   "metadata": {
     "source": "C:\\Users\\nicoc\\Downloads\\data-science-portfolio\\projects\\03-biomechanics-computer-vision\\data\\sample_squat_benchmark.mp4",
+    "exercise": "squat",
     "viewpoint": "frontal",
     "dominant_side": "bilateral",
     "total_frames": 180,

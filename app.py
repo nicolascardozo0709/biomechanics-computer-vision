@@ -112,14 +112,20 @@ async def get_benchmark_analysis() -> dict[str, Any]:
 
 
 @app.post("/api/load_benchmark")
-async def load_benchmark() -> dict[str, Any]:
-    """Run synthetic benchmark and update the active dashboard report."""
-    results = run_pipeline(use_benchmark=True, output_dir=OUTPUT_DIR, save_video=True)
+async def load_benchmark(exercise: str = "squat") -> dict[str, Any]:
+    """Run synthetic benchmark (squat or pushup) and update active dashboard report."""
+    results = run_pipeline(use_benchmark=True, exercise=exercise, output_dir=OUTPUT_DIR, save_video=True)
+    report_json = OUTPUT_DIR / "biomechanical_report.json"
+    with open(report_json, "w", encoding="utf-8") as f:
+        json.dump(results, f, indent=2)
     return {"status": "success", "metadata": results["metadata"]}
 
 
 @app.post("/api/analyze", response_model=AnalysisResponseSchema)
-async def analyze_uploaded_video(file: UploadFile = File(...)) -> dict[str, Any]:
+async def analyze_uploaded_video(
+    file: UploadFile = File(...),
+    exercise: str = "auto"
+) -> dict[str, Any]:
     """Upload custom video (MP4/MOV/AVI) and run full 3D pose kinematics pipeline."""
     if not file.filename.lower().endswith((".mp4", ".mov", ".avi", ".mkv", ".webm")):
         raise HTTPException(status_code=400, detail="Formato no soportado. Por favor sube un video MP4, MOV o AVI.")
@@ -129,7 +135,7 @@ async def analyze_uploaded_video(file: UploadFile = File(...)) -> dict[str, Any]
         content = await file.read()
         f.write(content)
 
-    results = run_pipeline(source_video=str(upload_path), output_dir=OUTPUT_DIR, save_video=True)
+    results = run_pipeline(source_video=str(upload_path), exercise=exercise, output_dir=OUTPUT_DIR, save_video=True)
     return {
         "status": "success",
         "metadata": results["metadata"],
@@ -196,13 +202,35 @@ async def serve_dashboard() -> str:
     max_trunk = max([r["max_trunk_lean_deg"] for r in reps]) if reps else 0.0
     max_valgus = max([r["peak_valgus_displacement"] for r in reps]) if reps else 0.0
 
-    # Perspective Badge Styling
-    if viewpoint == "sagittal":
+    exercise = meta.get("exercise", "squat")
+
+    # Perspective & Discipline Badge Styling
+    if exercise == "pushup":
         perspective_badge = f"""
-        <span class="badge" style="background: rgba(16, 185, 129, 0.15); color: #10B981; border: 1px solid rgba(16, 185, 129, 0.35);">
-            🎥 PERSPECTIVA SAGITAL (LATERAL) &bull; MIEMBRO ACTIVO: {dominant_side.upper()}
+        <span class="badge" style="background: rgba(124, 77, 255, 0.2); color: #B388FF; border: 1px solid rgba(124, 77, 255, 0.4);">
+            💪 DISCIPLINA: PUSH-UP &bull; PERFIL SAGITAL ({dominant_side.upper()})
         </span>
         """
+        kpi_rom_label = "Máxima Flexión Codo (ROM)"
+        kpi_rom_val = f"{best_knee:.1f}"
+        kpi_rom_unit = "grados"
+        kpi_rom_sub = "Estándar militar: &le; 90° pecho al suelo"
+
+        kpi_stability_label = "Alineación de Plancha Core"
+        kpi_stability_val = f"{max_trunk:.1f}"
+        kpi_stability_unit = "grados"
+        kpi_stability_sub = "Target: 170°-180° colinealidad recta"
+    elif viewpoint == "sagittal":
+        perspective_badge = f"""
+        <span class="badge" style="background: rgba(16, 185, 129, 0.15); color: #10B981; border: 1px solid rgba(16, 185, 129, 0.35);">
+            🏋️ DISCIPLINA: SQUAT &bull; PLANO SAGITAL ({dominant_side.upper()})
+        </span>
+        """
+        kpi_rom_label = "Máxima Profundidad ROM"
+        kpi_rom_val = f"{best_knee:.1f}"
+        kpi_rom_unit = "grados"
+        kpi_rom_sub = "Meta: &le; 90° para paralelo completo"
+
         kpi_stability_label = "Inclinación Máx. Torso"
         kpi_stability_val = f"{max_trunk:.1f}"
         kpi_stability_unit = "grados"
@@ -210,9 +238,14 @@ async def serve_dashboard() -> str:
     else:
         perspective_badge = """
         <span class="badge" style="background: rgba(0, 229, 255, 0.15); color: #00E5FF; border: 1px solid rgba(0, 229, 255, 0.35);">
-            🎥 PERSPECTIVA FRONTAL (CORONAL) &bull; ANÁLISIS BILATERAL
+            🏋️ DISCIPLINA: SQUAT &bull; PLANO FRONTAL (BILATERAL)
         </span>
         """
+        kpi_rom_label = "Máxima Profundidad ROM"
+        kpi_rom_val = f"{best_knee:.1f}"
+        kpi_rom_unit = "grados"
+        kpi_rom_sub = "Meta: &le; 90° para paralelo completo"
+
         kpi_stability_label = "Valgo Dinámico FPPA"
         kpi_stability_val = f"{max_valgus:.4f}"
         kpi_stability_unit = "norm"
@@ -247,12 +280,37 @@ async def serve_dashboard() -> str:
         bot_s = r.get("bottom_time_s", 0.0)
         end_s = r.get("end_time_s", 0.0)
 
-        if viewpoint == "sagittal":
+        if exercise == "pushup":
+            spec_1 = f"<span>Flexión de Codo (Profundidad):</span> <strong>{r.get('min_elbow_angle_deg', r['min_knee_angle_deg']):.1f}° ({r['depth_category']})</strong>"
+            spec_2 = f"<span>Alineación Plancha (Core):</span> <strong>{r.get('min_plank_angle_deg', r['max_trunk_lean_deg']):.1f}° ({'Core Rígido' if r.get('min_plank_angle_deg', 180) >= 165 else 'Cadera Caída / Hip Sag'})</strong>"
+            spec_3 = f"<span>Extensión Bloqueo Superior:</span> <strong>{r['symmetry_score']:.1f} pts (Lockout articular)</strong>"
+            spec_4 = f"<span>Cadencia / Tempo (Descenso / Ascenso):</span> <strong>{r['eccentric_time_s']}s / {r['concentric_time_s']}s</strong>"
+            spec_list_html = f"""
+                <li class="spec-item">{spec_1}</li>
+                <li class="spec-item">{spec_2}</li>
+                <li class="spec-item">{spec_3}</li>
+                <li class="spec-item">{spec_4}</li>
+            """
+        elif viewpoint == "sagittal":
             valgus_display = "N/A en Plano Sagital (Plano coronal ocluido)"
             symmetry_display = f"Miembro {dominant_side.upper()} en foco (Unilateral monocular)"
+            spec_list_html = f"""
+                <li class="spec-item"><span>Rango de Movimiento (Profundidad):</span> <strong>{r['min_knee_angle_deg']:.1f}° ({r['depth_category']})</strong></li>
+                <li class="spec-item"><span>Inclinación Torso vs Vertical:</span> <strong>{r['max_trunk_lean_deg']:.1f}° ({'Segura' if r['max_trunk_lean_deg'] <= 45.0 else 'Inclinación Excesiva'})</strong></li>
+                <li class="spec-item"><span>Estabilidad Valgo Dinámico:</span> <strong>{valgus_display}</strong></li>
+                <li class="spec-item"><span>Simetría Bilateral:</span> <strong>{symmetry_display}</strong></li>
+                <li class="spec-item"><span>Cadencia / Tempo (Excéntrico / Concéntrico):</span> <strong>{r['eccentric_time_s']}s / {r['concentric_time_s']}s</strong></li>
+            """
         else:
             valgus_display = f"{r['peak_valgus_displacement']:.4f} {'(Desviación Valgo)' if r['flags'].get('knee_valgus') else '(Estable)'}"
             symmetry_display = f"{r['knee_asymmetry_deg']:.1f}° {'(Asimetría bilateral)' if r['knee_asymmetry_deg'] > 6.0 else '(Equilateral)'}"
+            spec_list_html = f"""
+                <li class="spec-item"><span>Rango de Movimiento (Profundidad):</span> <strong>{r['min_knee_angle_deg']:.1f}° ({r['depth_category']})</strong></li>
+                <li class="spec-item"><span>Inclinación Torso vs Vertical:</span> <strong>{r['max_trunk_lean_deg']:.1f}° ({'Segura' if r['max_trunk_lean_deg'] <= 45.0 else 'Inclinación Excesiva'})</strong></li>
+                <li class="spec-item"><span>Estabilidad Valgo Dinámico:</span> <strong>{valgus_display}</strong></li>
+                <li class="spec-item"><span>Simetría Bilateral:</span> <strong>{symmetry_display}</strong></li>
+                <li class="spec-item"><span>Cadencia / Tempo (Excéntrico / Concéntrico):</span> <strong>{r['eccentric_time_s']}s / {r['concentric_time_s']}s</strong></li>
+            """
 
         card_html = f"""
         <div class="rep-card" id="repCard{num}" onclick="scrubVideo({st_s})" style="cursor: pointer;" title="Haz clic para reproducir esta repetición en el video">
@@ -272,11 +330,7 @@ async def serve_dashboard() -> str:
                 </div>
             </div>
             <ul class="spec-list">
-                <li class="spec-item"><span>Rango de Movimiento (Profundidad):</span> <strong>{r['min_knee_angle_deg']:.1f}° ({r['depth_category']})</strong></li>
-                <li class="spec-item"><span>Inclinación Torso vs Vertical:</span> <strong>{r['max_trunk_lean_deg']:.1f}° ({'Segura' if r['max_trunk_lean_deg'] <= 45.0 else 'Inclinación Excesiva'})</strong></li>
-                <li class="spec-item"><span>Estabilidad Valgo Dinámico:</span> <strong>{valgus_display}</strong></li>
-                <li class="spec-item"><span>Simetría Bilateral:</span> <strong>{symmetry_display}</strong></li>
-                <li class="spec-item"><span>Cadencia / Tempo (Excéntrico / Concéntrico):</span> <strong>{r['eccentric_time_s']}s / {r['concentric_time_s']}s</strong></li>
+                {spec_list_html}
             </ul>
             <div class="coaching-box {warning_class}">
                 <strong>Prescripción Biomecánica & Feedback:</strong><br>
@@ -822,9 +876,9 @@ async def serve_dashboard() -> str:
                 <div class="metric-subtext">{total_reps} repeticiones evaluadas clínicamente</div>
             </div>
             <div class="metric-card" style="--card-accent: var(--accent-green);">
-                <div class="metric-label">Máxima Profundidad ROM</div>
-                <div class="metric-value">{best_knee:.1f} <span class="metric-unit">grados</span></div>
-                <div class="metric-subtext">Meta: &le; 90° para paralelo completo</div>
+                <div class="metric-label">{kpi_rom_label}</div>
+                <div class="metric-value">{kpi_rom_val} <span class="metric-unit">{kpi_rom_unit}</span></div>
+                <div class="metric-subtext">{kpi_rom_sub}</div>
             </div>
             <div class="metric-card" style="--card-accent: var(--accent-amber);">
                 <div class="metric-label">{kpi_stability_label}</div>
@@ -876,10 +930,11 @@ async def serve_dashboard() -> str:
 
                 <div class="action-bar">
                     <input type="file" id="videoFileInput" accept="video/mp4,video/quicktime,video/x-msvideo,video/*" style="display: none;" onchange="uploadUserVideo(this)">
-                    <button class="btn btn-primary" id="uploadBtn" onclick="document.getElementById('videoFileInput').click()">&#128249; Subir Mi Video de Sentadilla</button>
-                    <button class="btn btn-secondary" onclick="triggerBenchmark()">&#9654; Ver Benchmark Sintético</button>
-                    <button class="btn btn-secondary" onclick="window.print()">&#128424; Imprimir / Exportar Reporte</button>
-                    <a href="/api/artifacts/biomechanical_report.json" download class="btn btn-secondary">&#128190; Exportar JSON</a>
+                    <button class="btn btn-primary" id="uploadBtn" onclick="document.getElementById('videoFileInput').click()">📁 Subir Video (Sentadilla / Push-Up)</button>
+                    <button class="btn btn-secondary" onclick="triggerBenchmark('squat')">🏋️ Probar Demo Sentadilla</button>
+                    <button class="btn btn-secondary" onclick="triggerBenchmark('pushup')">💪 Probar Demo Push-Up</button>
+                    <button class="btn btn-secondary" onclick="window.print()">🖨️ Imprimir / Exportar Reporte</button>
+                    <a href="/api/artifacts/biomechanical_report.json" download class="btn btn-secondary">💾 Exportar JSON</a>
                 </div>
             </div>
 
@@ -970,10 +1025,15 @@ async def serve_dashboard() -> str:
             }};
         }});
 
+        const currentExercise = "{exercise}";
+        const radarLabels = (currentExercise === 'pushup')
+            ? ['Profundidad Codo', 'Plancha Core', 'Extensi\u00f3n Bloqueo', 'Simetr\u00eda Din\u00e1mica', 'Tempo & Cadencia']
+            : ['Profundidad ROM', 'Alineaci\u00f3n Rodilla', 'Neutralidad Espinal', 'Simetr\u00eda Miembros', 'Tempo & Control'];
+
         new Chart(radarCtx, {{
             type: 'radar',
             data: {{
-                labels: ['Profundidad ROM', 'Alineación Rodilla', 'Neutralidad Espinal', 'Simetría Miembros', 'Tempo & Control'],
+                labels: radarLabels,
                 datasets: datasets.length > 0 ? datasets : [{{
                     label: 'Sin Repeticiones',
                     data: [0, 0, 0, 0, 0],
@@ -1068,18 +1128,18 @@ async def serve_dashboard() -> str:
             }}
         }}
 
-        async function triggerBenchmark() {{
+        async function triggerBenchmark(exerciseType = 'squat') {{
             const btn = event.target;
             const oldText = btn.innerHTML;
-            btn.innerHTML = '&#9203; Cargando Benchmark Sintético...';
+            btn.innerHTML = '&#9203; Cargando Demo ' + (exerciseType === 'pushup' ? 'Push-Up' : 'Sentadilla') + '...';
             btn.disabled = true;
             try {{
-                const res = await fetch('/api/load_benchmark', {{ method: 'POST' }});
+                const res = await fetch('/api/load_benchmark?exercise=' + exerciseType, {{ method: 'POST' }});
                 if (res.ok) {{
-                    btn.innerHTML = '&#9989; &iexcl;Benchmark Cargado!';
+                    btn.innerHTML = '&#9989; &iexcl;Demo Cargada!';
                     setTimeout(() => {{ window.location.reload(); }}, 600);
                 }} else {{
-                    alert('Error cargando benchmark.');
+                    alert('Error cargando demo.');
                     btn.innerHTML = oldText;
                     btn.disabled = false;
                 }}
@@ -1097,5 +1157,8 @@ async def serve_dashboard() -> str:
 
 
 if __name__ == "__main__":
+    import os
     import uvicorn
-    uvicorn.run("app:app", host="127.0.0.1", port=8000, reload=True)
+    port = int(os.environ.get("PORT", 8000))
+    host = os.environ.get("HOST", "127.0.0.1")
+    uvicorn.run("app:app", host=host, port=port, reload=True)

@@ -14,6 +14,8 @@ from typing import Generator, Any
 import cv2
 import numpy as np
 
+from src.features.kinematics import calculate_pushup_elbow_angle
+
 
 class VideoLoader:
     """Manages video file stream ingestion and frame generation with automatic orientation normalization."""
@@ -265,3 +267,152 @@ def generate_benchmark_squat_data(
         "ground_truth_reps": gt_reps,
         "video_path": str(output_video_path) if output_video_path else None
     }
+
+
+def generate_benchmark_pushup_data(
+    output_video_path: Path | str | None = None,
+    num_frames: int = 180,
+    fps: float = 30.0,
+    width: int = 640,
+    height: int = 720
+) -> tuple[list[dict[str, np.ndarray]], dict[str, Any]]:
+    """
+    Generate synthetic kinematic ground-truth data and render a benchmark push-up video.
+    Contains 2 distinct repetitions:
+      - Rep 1 (Frames 15-85): Textbook Military Push-Up (76° elbow flexion, 178° rigid plank).
+      - Rep 2 (Frames 100-170): Flawed Push-Up (108° shallow depth, 150° lumbar/hip sag).
+    """
+    landmark_frames: list[dict[str, np.ndarray]] = []
+    video_writer = None
+
+    if output_video_path is not None:
+        output_video_path = Path(output_video_path)
+        output_video_path.parent.mkdir(parents=True, exist_ok=True)
+        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+        video_writer = cv2.VideoWriter(str(output_video_path), fourcc, fps, (width, height))
+
+    gt_reps = [
+        {"rep": 1, "type": "Military Standard Deep Push-Up", "target_depth": 76.0, "plank_alignment": 178.0},
+        {"rep": 2, "type": "Compromised Shallow & Sagging Push-Up", "target_depth": 108.0, "plank_alignment": 150.0}
+    ]
+
+    for f in range(num_frames):
+        if 15 <= f < 85:
+            # Rep 1: Perfect military push-up (78° deep elbow flexion, 180° rigid plank)
+            cycle = (f - 15) / 70.0
+            descent = np.sin(cycle * np.pi)
+            chest_y_offset = descent * 0.12
+            elbow_factor = descent * (0.12 / 0.15)
+            hip_sag = 0.0
+        elif 100 <= f < 170:
+            # Rep 2: Flawed rep (102° shallow depth & 153° sagging hips)
+            cycle = (f - 100) / 70.0
+            descent = np.sin(cycle * np.pi)
+            chest_y_offset = descent * 0.10
+            elbow_factor = descent * (0.10 / 0.15)
+            hip_sag = descent * 0.06
+        else:
+            chest_y_offset = 0.0
+            elbow_factor = 0.0
+            hip_sag = 0.0
+
+        # Lateral projection: Athlete facing left (wrists at left, feet at right)
+        # Coordinates in normalized [x, y, z]
+        floor_y = 0.72
+        wrist = np.array([0.30, floor_y, 0.0])
+        ankle = np.array([0.82, floor_y, 0.0])
+        foot = np.array([0.85, floor_y, 0.0])
+
+        shoulder_base_y = 0.46
+        shoulder_y = shoulder_base_y + chest_y_offset
+        shoulder = np.array([0.31, shoulder_y, 0.0])
+
+        # Elbow coordinates
+        elbow_x = wrist[0] + 0.09 * elbow_factor
+        elbow_y = (shoulder[1] + wrist[1]) / 2.0 + 0.07 * elbow_factor
+        elbow = np.array([elbow_x, elbow_y, 0.0])
+        elbow_angle = calculate_pushup_elbow_angle(shoulder, elbow, wrist, width, height)
+
+        # Rigid plank connects shoulder to ankle, hip sits in-between with sag
+        t_hip = 0.42
+        hip_x = shoulder[0] + t_hip * (ankle[0] - shoulder[0])
+        hip_y = shoulder[1] + t_hip * (ankle[1] - shoulder[1]) + hip_sag
+        hip = np.array([hip_x, hip_y, 0.0])
+
+        t_knee = 0.72
+        knee_x = shoulder[0] + t_knee * (ankle[0] - shoulder[0])
+        knee_y = shoulder[1] + t_knee * (ankle[1] - shoulder[1]) + hip_sag * 0.5
+        knee = np.array([knee_x, knee_y, 0.0])
+
+        nose = np.array([0.24, shoulder_y - 0.04, 0.0])
+
+        frame_dict = {
+            "left_shoulder": shoulder,
+            "right_shoulder": shoulder + np.array([0.0, 0.0, -0.08]),
+            "left_elbow": elbow,
+            "right_elbow": elbow + np.array([0.0, 0.0, -0.08]),
+            "left_wrist": wrist,
+            "right_wrist": wrist + np.array([0.0, 0.0, -0.08]),
+            "left_hip": hip,
+            "right_hip": hip + np.array([0.0, 0.0, -0.08]),
+            "left_knee": knee,
+            "right_knee": knee + np.array([0.0, 0.0, -0.08]),
+            "left_ankle": ankle,
+            "right_ankle": ankle + np.array([0.0, 0.0, -0.08]),
+            "left_foot_index": foot,
+            "right_foot_index": foot + np.array([0.0, 0.0, -0.08]),
+            "nose": nose,
+            "frame_idx": np.array([f]),
+            "timestamp": np.array([f / fps])
+        }
+        landmark_frames.append(frame_dict)
+
+        if video_writer is not None:
+            canvas = np.zeros((height, width, 3), dtype=np.uint8)
+            canvas[:] = (18, 22, 28)
+
+            def to_px(pt: np.ndarray) -> tuple[int, int]:
+                return (int(pt[0] * width), int(pt[1] * height))
+
+            # Floor line
+            cv2.line(canvas, (40, int(floor_y * height) + 6), (width - 40, int(floor_y * height) + 6), (50, 60, 75), 2)
+
+            # Draw bones
+            arm_color = (0, 220, 140) if elbow_angle <= 90.0 else (255, 180, 40)
+            plank_color = (0, 220, 140) if hip_sag < 0.02 else (40, 100, 240)
+
+            # Arm: shoulder -> elbow -> wrist
+            cv2.line(canvas, to_px(shoulder), to_px(elbow), arm_color, 4)
+            cv2.line(canvas, to_px(elbow), to_px(wrist), arm_color, 4)
+
+            # Plank body: shoulder -> hip -> knee -> ankle
+            cv2.line(canvas, to_px(shoulder), to_px(hip), plank_color, 4)
+            cv2.line(canvas, to_px(hip), to_px(knee), plank_color, 4)
+            cv2.line(canvas, to_px(knee), to_px(ankle), plank_color, 4)
+            cv2.line(canvas, to_px(ankle), to_px(foot), (180, 180, 180), 3)
+
+            # Head
+            cv2.circle(canvas, to_px(nose), 12, (220, 220, 220), -1)
+
+            # Joint nodes
+            for pt in [shoulder, elbow, wrist, hip, knee, ankle]:
+                cv2.circle(canvas, to_px(pt), 7, (255, 255, 255), -1)
+                cv2.circle(canvas, to_px(pt), 5, (220, 120, 0), -1)
+
+            # Status overlay
+            status_text = "Rep 1: Military Deep Push-Up (Elbow <= 90°)" if f < 95 else "Rep 2: Compromised Depth & Hip Sag"
+            cv2.putText(canvas, f"BENCHMARK PUSH-UP | FRAME {f:03d}/{num_frames}", (24, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (160, 180, 200), 1, cv2.LINE_AA)
+            cv2.putText(canvas, status_text, (24, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (255, 255, 255), 2, cv2.LINE_AA)
+
+            video_writer.write(canvas)
+
+    if video_writer is not None:
+        video_writer.release()
+
+    return landmark_frames, {
+        "num_frames": num_frames,
+        "fps": fps,
+        "ground_truth_reps": gt_reps,
+        "video_path": str(output_video_path) if output_video_path else None
+    }
+

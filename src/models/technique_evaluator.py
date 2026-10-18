@@ -223,3 +223,122 @@ class TechniqueEvaluator:
             },
             "coaching_cues": coaching_cues
         }
+
+    def evaluate_pushup_repetition(
+        self,
+        rep_meta: dict[str, Any],
+        elbow_angles: np.ndarray,
+        plank_angles: np.ndarray,
+        dominant_side: str = "left"
+    ) -> dict[str, Any]:
+        """
+        Evaluate a single push-up repetition across biomechanical dimensions:
+        1. Depth (Elbow Flexion, military/clinical standard <= 90°)
+        2. Lockout Extension (Elbow >= 155°)
+        3. Core & Plank Stability (Shoulder-Hip-Ankle alignment ~170-180°)
+        4. Cadence & Tempo Profile
+        """
+        start = rep_meta["start_frame"]
+        end = rep_meta["end_frame"]
+
+        rep_elbow = elbow_angles[start:end] if len(elbow_angles[start:end]) > 0 else np.array([180.0])
+        rep_plank = plank_angles[start:end] if len(plank_angles[start:end]) > 0 else np.array([180.0])
+
+        min_elbow = float(np.min(rep_elbow))
+        max_elbow = float(np.max(rep_elbow))
+        min_plank = float(np.min(rep_plank))
+
+        # 1. Depth Dimension (Standard: <= 90°)
+        if min_elbow <= 80.0:
+            depth_category = "Deep (Chest-to-Floor)"
+            depth_score = 100.0
+        elif min_elbow <= 92.0:
+            depth_category = "Valid Military Standard"
+            depth_score = 95.0
+        elif min_elbow <= 105.0:
+            depth_category = "Borderline / Partial Depth"
+            depth_score = 70.0
+        else:
+            depth_category = "Shallow / Quarter Push-Up"
+            depth_score = 40.0
+
+        # 2. Lockout Extension Dimension
+        if max_elbow >= 160.0:
+            lockout_score = 100.0
+        elif max_elbow >= 150.0:
+            lockout_score = 85.0
+        else:
+            lockout_score = 65.0
+
+        # 3. Plank Alignment (Spinal Collinearity)
+        hip_sag_flag = False
+        if min_plank >= 168.0:
+            plank_score = 100.0
+        elif min_plank >= 155.0:
+            plank_score = 80.0
+            hip_sag_flag = True
+        else:
+            plank_score = max(30.0, 100.0 - (168.0 - min_plank) * 3.0)
+            hip_sag_flag = True
+
+        # 4. Tempo
+        ecc_time = rep_meta.get("eccentric_duration_s", 0.0)
+        con_time = rep_meta.get("concentric_duration_s", 0.0)
+
+        if ecc_time >= 0.7:
+            tempo_score = 95.0
+        elif ecc_time >= 0.4:
+            tempo_score = 80.0
+        else:
+            tempo_score = 60.0
+
+        overall_score = (
+            0.40 * depth_score +
+            0.30 * plank_score +
+            0.15 * lockout_score +
+            0.15 * tempo_score
+        )
+
+        coaching_cues = []
+        if depth_score >= 90.0 and plank_score >= 90.0:
+            coaching_cues.append(
+                f"Excelente Técnica de Push-Up: Profundidad completa ({min_elbow:.1f}°) con línea de plancha sólida ({min_plank:.1f}°)."
+            )
+        if depth_score < 75.0:
+            coaching_cues.append(
+                f"Profundidad Insuficiente: Flexión de codo llegó a {min_elbow:.1f}° (meta: <=90°). Baja el pecho hasta rozar el suelo."
+            )
+        if hip_sag_flag:
+            coaching_cues.append(
+                f"Alineación de Core: Desviación en cadera ({min_plank:.1f}°). Activa glúteos y transverso abdominal para evitar hiperextensión lumbar."
+            )
+        if lockout_score < 80.0:
+            coaching_cues.append(
+                f"Extensión Incompleta: Bloqueo superior alcanzó solo {max_elbow:.1f}° (meta: >=160°). Extiende los brazos totalmente arriba."
+            )
+
+        return {
+            "rep_number": rep_meta["rep_number"],
+            "overall_score": round(float(overall_score), 1),
+            "depth_score": round(float(depth_score), 1),
+            "alignment_score": round(float(plank_score), 1),
+            "trunk_score": round(float(plank_score), 1),
+            "symmetry_score": round(float(lockout_score), 1),
+            "tempo_score": round(float(tempo_score), 1),
+            "depth_category": depth_category,
+            "min_knee_angle_deg": round(float(min_elbow), 1),
+            "min_elbow_angle_deg": round(float(min_elbow), 1),
+            "max_trunk_lean_deg": round(float(min_plank), 1),
+            "min_plank_angle_deg": round(float(min_plank), 1),
+            "peak_valgus_displacement": 0.0,
+            "knee_asymmetry_deg": 0.0,
+            "eccentric_time_s": ecc_time,
+            "concentric_time_s": con_time,
+            "flags": {
+                "knee_valgus": False,
+                "excessive_forward_lean": hip_sag_flag,
+                "shallow_depth": depth_score < 75.0
+            },
+            "coaching_cues": coaching_cues
+        }
+
