@@ -32,7 +32,10 @@ from src.features.kinematics import (
     calculate_frontal_valgus_index,
     smooth_kinematic_signal,
     calculate_angular_velocity,
-    segment_squat_phases
+    segment_squat_phases,
+    classify_camera_viewpoint,
+    calculate_isotropic_angle,
+    calculate_isotropic_trunk_lean
 )
 from src.models.pose_detector import PoseDetector
 from src.models.technique_evaluator import TechniqueEvaluator
@@ -111,6 +114,8 @@ def run_pipeline(
         source_path = str(benchmark_video_path)
         fps = meta["fps"]
         num_frames = meta["num_frames"]
+        frame_w = 640.0
+        frame_h = 720.0
         use_precomputed_landmarks = True
     else:
         print(f"\n[1/5] Ingesting Video File: {source_video}...")
@@ -120,6 +125,8 @@ def run_pipeline(
             raise FileNotFoundError(f"Could not open input video: {source_video}")
         fps = loader.fps
         num_frames = loader.frame_count
+        frame_w = float(loader.width)
+        frame_h = float(loader.height)
         loader.close()
         use_precomputed_landmarks = False
         raw_landmarks = []
@@ -170,16 +177,34 @@ def run_pipeline(
         # Step 2b: Precise 1:1 Landmark sequence alignment & interpolation
         processed_landmarks = interpolate_landmarks_sequence(raw_frames_landmarks, max_gap=6)
 
-        # Step 2c: Frame-synchronized joint kinematics extraction (strictly len == num_frames)
+    # Classify camera viewpoint (Frontal vs Sagittal Profile)
+    if use_precomputed_landmarks:
+        viewpoint = "frontal"
+        dominant_side = "bilateral"
+    else:
+        viewpoint, dominant_side = classify_camera_viewpoint(processed_landmarks)
+    print(f"   -> Kinematic Projection Viewpoint: {viewpoint.upper()} (Active Limb: {dominant_side.upper()})")
+
+    # Step 2c: Frame-synchronized joint kinematics extraction (strictly len == num_frames)
+    if not use_precomputed_landmarks:
         for idx in range(len(processed_landmarks)):
             timestamps.append(float(idx / fps))
             lm = processed_landmarks[idx]
             if lm is not None and "left_knee" in lm and "left_hip" in lm and "left_ankle" in lm:
-                k_l = calculate_angle_3d(lm["left_hip"], lm["left_knee"], lm["left_ankle"])
-                k_r = calculate_angle_3d(lm["right_hip"], lm["right_knee"], lm["right_ankle"])
-                trunk = calculate_trunk_inclination(lm["left_shoulder"], lm["left_hip"])
-                v_l = calculate_frontal_valgus_index(lm["left_hip"], lm["left_knee"], lm["left_ankle"], is_left=True)
-                v_r = calculate_frontal_valgus_index(lm["right_hip"], lm["right_knee"], lm["right_ankle"], is_left=False)
+                if viewpoint == "sagittal":
+                    k_l = calculate_isotropic_angle(lm["left_hip"], lm["left_knee"], lm["left_ankle"], frame_w, frame_h)
+                    k_r = calculate_isotropic_angle(lm["right_hip"], lm["right_knee"], lm["right_ankle"], frame_w, frame_h)
+                    near_sh = lm["right_shoulder"] if dominant_side == "right" else lm["left_shoulder"]
+                    near_hip = lm["right_hip"] if dominant_side == "right" else lm["left_hip"]
+                    trunk = calculate_isotropic_trunk_lean(near_sh, near_hip, frame_w, frame_h)
+                    v_l = {"medial_displacement": 0.0}
+                    v_r = {"medial_displacement": 0.0}
+                else:
+                    k_l = calculate_angle_3d(lm["left_hip"], lm["left_knee"], lm["left_ankle"])
+                    k_r = calculate_angle_3d(lm["right_hip"], lm["right_knee"], lm["right_ankle"])
+                    trunk = calculate_trunk_inclination(lm["left_shoulder"], lm["left_hip"])
+                    v_l = calculate_frontal_valgus_index(lm["left_hip"], lm["left_knee"], lm["left_ankle"], is_left=True)
+                    v_r = calculate_frontal_valgus_index(lm["right_hip"], lm["right_knee"], lm["right_ankle"], is_left=False)
 
                 left_knee_raw.append(k_l)
                 right_knee_raw.append(k_r)
@@ -190,8 +215,8 @@ def run_pipeline(
                 left_knee_raw.append(left_knee_raw[-1] if left_knee_raw else 180.0)
                 right_knee_raw.append(right_knee_raw[-1] if right_knee_raw else 180.0)
                 trunk_raw.append(trunk_raw[-1] if trunk_raw else 0.0)
-                left_valgus_raw.append(left_valgus_raw[-1] if left_valgus_raw else 0.0)
-                right_valgus_raw.append(right_valgus_raw[-1] if right_valgus_raw else 0.0)
+                left_valgus_raw.append(0.0)
+                right_valgus_raw.append(0.0)
 
     # Convert to NumPy
     time_arr = np.array(timestamps, dtype=np.float64)
@@ -209,11 +234,21 @@ def run_pipeline(
     lv_filt = smooth_kinematic_signal(lv_arr, window_length=9, polyorder=2)
     rv_filt = smooth_kinematic_signal(rv_arr, window_length=9, polyorder=2)
 
-    ang_vel = calculate_angular_velocity(lk_filt, fps=fps)
+    if viewpoint == "sagittal":
+        eff_knee_raw = []
+        for i in range(len(lk_filt)):
+            kl_val, kr_val = lk_filt[i], rk_filt[i]
+            val = min(kl_val, kr_val) if min(kl_val, kr_val) < 140.0 else max(kl_val, kr_val)
+            eff_knee_raw.append(val)
+        active_knee_signal = np.array(eff_knee_raw, dtype=np.float64)
+    else:
+        active_knee_signal = lk_filt
+
+    ang_vel = calculate_angular_velocity(active_knee_signal, fps=fps)
 
     # 4. Movement Phase Segmentation & Biomechanical Technique Evaluation
-    print("\n[4/5] Segmenting Repetitions & Scoring 5-Dimension Movement Competency...")
-    reps = segment_squat_phases(lk_filt, fps=fps)
+    print(f"\n[4/5] Segmenting Repetitions on {dominant_side.upper()} Limb & Scoring Biomechanics...")
+    reps = segment_squat_phases(active_knee_signal, fps=fps, standing_threshold=150.0, inflection_threshold=110.0)
     print(f"   -> Successfully segmented {len(reps)} complete repetition cycle(s).")
 
     evaluator = TechniqueEvaluator()
@@ -225,7 +260,9 @@ def run_pipeline(
             right_knee_angles=rk_filt,
             trunk_angles=trunk_filt,
             left_valgus_series=lv_filt,
-            right_valgus_series=rv_filt
+            right_valgus_series=rv_filt,
+            viewpoint=viewpoint,
+            dominant_side=dominant_side
         )
         evaluations.append(ev)
 
@@ -271,9 +308,9 @@ def run_pipeline(
                 break
 
             # Current metrics
-            cur_knee = float(lk_filt[f_idx])
+            cur_knee = float(active_knee_signal[f_idx])
             cur_trunk = float(trunk_filt[f_idx])
-            cur_valgus = bool(lv_filt[f_idx] > 0.02 or rv_filt[f_idx] > 0.02)
+            cur_valgus = bool(lv_filt[f_idx] > 0.02 or rv_filt[f_idx] > 0.02) if viewpoint == "frontal" else False
 
             # Determine rep count and phase
             rep_num = 0
@@ -300,7 +337,13 @@ def run_pipeline(
                 "depth_status": depth_status
             }
 
-            annotated = renderer.render_frame(frame, processed_landmarks[f_idx], metric_dict)
+            annotated = renderer.render_frame(
+                frame,
+                processed_landmarks[f_idx],
+                metric_dict,
+                viewpoint=viewpoint,
+                dominant_side=dominant_side
+            )
             out_vid.write(annotated)
             f_idx += 1
 
@@ -331,6 +374,8 @@ def run_pipeline(
     summary_report = {
         "metadata": {
             "source": source_path,
+            "viewpoint": viewpoint,
+            "dominant_side": dominant_side,
             "total_frames": len(time_arr),
             "fps": fps,
             "duration_s": round(float(time_arr[-1]) if len(time_arr) > 0 else 0.0, 2),

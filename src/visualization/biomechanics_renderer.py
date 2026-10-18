@@ -28,8 +28,10 @@ class BiomechanicsRenderer:
     def render_frame(
         self,
         frame_bgr: np.ndarray,
-        landmarks: dict[str, np.ndarray],
-        metrics: dict[str, Any]
+        landmarks: dict[str, np.ndarray] | None,
+        metrics: dict[str, Any],
+        viewpoint: str = "frontal",
+        dominant_side: str = "bilateral"
     ) -> np.ndarray:
         """
         Overlay skeleton, angles, and telemetry HUD onto a single video frame.
@@ -38,6 +40,8 @@ class BiomechanicsRenderer:
             frame_bgr: Source OpenCV BGR image.
             landmarks: Dictionary of landmark coordinates [x, y, z] in normalized coords.
             metrics: Instantaneous telemetry dictionary (angles, rep, phase, flags).
+            viewpoint: Camera projection ('frontal' or 'sagittal').
+            dominant_side: Visible limb side ('right', 'left', or 'bilateral').
 
         Returns:
             Annotated OpenCV BGR image.
@@ -52,50 +56,80 @@ class BiomechanicsRenderer:
         req_keys = ["left_shoulder", "right_shoulder", "left_hip", "right_hip", "left_knee", "right_knee", "left_ankle", "right_ankle"]
         has_all = landmarks is not None and all(k in landmarks for k in req_keys)
 
+        knee_angle = metrics.get("knee_angle", 180.0)
+        trunk_angle = metrics.get("trunk_angle", 0.0)
+
         if has_all and landmarks is not None:
             s_l, s_r = to_px(landmarks["left_shoulder"]), to_px(landmarks["right_shoulder"])
             h_l, h_r = to_px(landmarks["left_hip"]), to_px(landmarks["right_hip"])
             k_l, k_r = to_px(landmarks["left_knee"]), to_px(landmarks["right_knee"])
             a_l, a_r = to_px(landmarks["left_ankle"]), to_px(landmarks["right_ankle"])
 
-            # Determine leg colors based on valgus or depth status
-            is_valgus = metrics.get("valgus_alert", False)
-            leg_color = self.color_danger if is_valgus else self.color_safe
+            if viewpoint == "sagittal":
+                # Determine near (prominent) and far (occluded) limbs
+                if dominant_side == "right":
+                    n_s, n_h, n_k, n_a = s_r, h_r, k_r, a_r
+                    f_s, f_h, f_k, f_a = s_l, h_l, k_l, a_l
+                else:
+                    n_s, n_h, n_k, n_a = s_l, h_l, k_l, a_l
+                    f_s, f_h, f_k, f_a = s_r, h_r, k_r, a_r
 
-            # Draw Skeletal Segments
-            # Torso Box
-            cv2.line(canvas, s_l, s_r, (180, 190, 200), 2, cv2.LINE_AA)
-            cv2.line(canvas, h_l, h_r, (180, 190, 200), 2, cv2.LINE_AA)
-            cv2.line(canvas, s_l, h_l, (200, 210, 220), 3, cv2.LINE_AA)
-            cv2.line(canvas, s_r, h_r, (200, 210, 220), 3, cv2.LINE_AA)
+                # Draw far occluded limb subtly to prevent visual tangling
+                cv2.line(canvas, f_s, f_h, (40, 50, 65), 1, cv2.LINE_AA)
+                cv2.line(canvas, f_h, f_k, (40, 50, 65), 2, cv2.LINE_AA)
+                cv2.line(canvas, f_k, f_a, (40, 50, 65), 2, cv2.LINE_AA)
 
-            # Left Leg
-            cv2.line(canvas, h_l, k_l, leg_color, 4, cv2.LINE_AA)
-            cv2.line(canvas, k_l, a_l, leg_color, 4, cv2.LINE_AA)
+                # Draw prominent near-side kinetic chain
+                leg_color = self.color_safe
+                cv2.line(canvas, n_s, n_h, (230, 240, 255), 3, cv2.LINE_AA)
+                cv2.line(canvas, n_h, n_k, leg_color, 4, cv2.LINE_AA)
+                cv2.line(canvas, n_k, n_a, leg_color, 4, cv2.LINE_AA)
 
-            # Right Leg
-            cv2.line(canvas, h_r, k_r, leg_color, 4, cv2.LINE_AA)
-            cv2.line(canvas, k_r, a_r, leg_color, 4, cv2.LINE_AA)
+                # Horizontal Depth Reference Line across knee
+                cv2.line(canvas, (max(0, n_k[0] - 80), n_k[1]), (min(w, n_k[0] + 80), n_k[1]), (80, 200, 120), 1, cv2.LINE_AA)
 
-            # Joint Nodes
-            for pt in [s_l, s_r, h_l, h_r, k_l, k_r, a_l, a_r]:
-                cv2.circle(canvas, pt, 6, (255, 255, 255), -1, cv2.LINE_AA)
-                cv2.circle(canvas, pt, 4, self.color_accent, -1, cv2.LINE_AA)
+                # Joint Nodes
+                for pt in [n_s, n_h, n_k, n_a]:
+                    cv2.circle(canvas, pt, 6, (255, 255, 255), -1, cv2.LINE_AA)
+                    cv2.circle(canvas, pt, 4, self.color_accent, -1, cv2.LINE_AA)
 
-            # Render Angle Badges near joints
-            knee_angle = metrics.get("knee_angle", 180.0)
-            trunk_angle = metrics.get("trunk_angle", 0.0)
+                # Angle Badges
+                k_label_pt = (n_k[0] + 20, n_k[1])
+                cv2.rectangle(canvas, (k_label_pt[0] - 6, k_label_pt[1] - 16), (k_label_pt[0] + 68, k_label_pt[1] + 8), (10, 15, 20), -1)
+                cv2.putText(canvas, f"{knee_angle:.1f}\xb0", (k_label_pt[0], k_label_pt[1]), cv2.FONT_HERSHEY_SIMPLEX, 0.55, leg_color, 2, cv2.LINE_AA)
 
-            # Knee angle label
-            k_label_pt = (k_l[0] - 80, k_l[1])
-            cv2.rectangle(canvas, (k_label_pt[0] - 6, k_label_pt[1] - 16), (k_label_pt[0] + 68, k_label_pt[1] + 8), (10, 15, 20), -1)
-            cv2.putText(canvas, f"{knee_angle:.1f}\xb0", (k_label_pt[0], k_label_pt[1]), cv2.FONT_HERSHEY_SIMPLEX, 0.55, leg_color, 2, cv2.LINE_AA)
+                h_label_pt = (n_h[0] + 20, n_h[1] - 10)
+                cv2.rectangle(canvas, (h_label_pt[0] - 6, h_label_pt[1] - 16), (h_label_pt[0] + 84, h_label_pt[1] + 8), (10, 15, 20), -1)
+                lean_color = self.color_warning if trunk_angle > 45.0 else (220, 220, 220)
+                cv2.putText(canvas, f"Lean:{trunk_angle:.1f}\xb0", (h_label_pt[0], h_label_pt[1]), cv2.FONT_HERSHEY_SIMPLEX, 0.45, lean_color, 1, cv2.LINE_AA)
 
-            # Trunk lean label near hip
-            h_label_pt = (h_l[0] - 90, h_l[1] - 10)
-            cv2.rectangle(canvas, (h_label_pt[0] - 6, h_label_pt[1] - 16), (h_label_pt[0] + 84, h_label_pt[1] + 8), (10, 15, 20), -1)
-            lean_color = self.color_warning if trunk_angle > 45.0 else (220, 220, 220)
-            cv2.putText(canvas, f"Lean:{trunk_angle:.1f}\xb0", (h_label_pt[0], h_label_pt[1]), cv2.FONT_HERSHEY_SIMPLEX, 0.45, lean_color, 1, cv2.LINE_AA)
+            else:
+                # Frontal View Skeletal Rendering
+                is_valgus = metrics.get("valgus_alert", False)
+                leg_color = self.color_danger if is_valgus else self.color_safe
+
+                cv2.line(canvas, s_l, s_r, (180, 190, 200), 2, cv2.LINE_AA)
+                cv2.line(canvas, h_l, h_r, (180, 190, 200), 2, cv2.LINE_AA)
+                cv2.line(canvas, s_l, h_l, (200, 210, 220), 3, cv2.LINE_AA)
+                cv2.line(canvas, s_r, h_r, (200, 210, 220), 3, cv2.LINE_AA)
+
+                cv2.line(canvas, h_l, k_l, leg_color, 4, cv2.LINE_AA)
+                cv2.line(canvas, k_l, a_l, leg_color, 4, cv2.LINE_AA)
+                cv2.line(canvas, h_r, k_r, leg_color, 4, cv2.LINE_AA)
+                cv2.line(canvas, k_r, a_r, leg_color, 4, cv2.LINE_AA)
+
+                for pt in [s_l, s_r, h_l, h_r, k_l, k_r, a_l, a_r]:
+                    cv2.circle(canvas, pt, 6, (255, 255, 255), -1, cv2.LINE_AA)
+                    cv2.circle(canvas, pt, 4, self.color_accent, -1, cv2.LINE_AA)
+
+                k_label_pt = (k_l[0] - 80, k_l[1])
+                cv2.rectangle(canvas, (k_label_pt[0] - 6, k_label_pt[1] - 16), (k_label_pt[0] + 68, k_label_pt[1] + 8), (10, 15, 20), -1)
+                cv2.putText(canvas, f"{knee_angle:.1f}\xb0", (k_label_pt[0], k_label_pt[1]), cv2.FONT_HERSHEY_SIMPLEX, 0.55, leg_color, 2, cv2.LINE_AA)
+
+                h_label_pt = (h_l[0] - 90, h_l[1] - 10)
+                cv2.rectangle(canvas, (h_label_pt[0] - 6, h_label_pt[1] - 16), (h_label_pt[0] + 84, h_label_pt[1] + 8), (10, 15, 20), -1)
+                lean_color = self.color_warning if trunk_angle > 45.0 else (220, 220, 220)
+                cv2.putText(canvas, f"Lean:{trunk_angle:.1f}\xb0", (h_label_pt[0], h_label_pt[1]), cv2.FONT_HERSHEY_SIMPLEX, 0.45, lean_color, 1, cv2.LINE_AA)
 
         # Draw Top HUD Dashboard Banner
         hud_h = 70
@@ -109,7 +143,8 @@ class BiomechanicsRenderer:
         phase_str = metrics.get("phase", "CALIBRATING").upper()
         depth_status = metrics.get("depth_status", "STANDING")
 
-        cv2.putText(canvas, "AI BIOMECHANICS ENGINE", (16, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.48, (140, 160, 185), 1, cv2.LINE_AA)
+        hud_title = f"SAGITTAL VIEW ({dominant_side.upper()})" if viewpoint == "sagittal" else "AI BIOMECHANICS ENGINE"
+        cv2.putText(canvas, hud_title, (16, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.48, (140, 160, 185), 1, cv2.LINE_AA)
         cv2.putText(canvas, f"REPETITIONS: {rep_count}", (16, 52), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (255, 255, 255), 2, cv2.LINE_AA)
 
         cv2.putText(canvas, "CURRENT PHASE", (210, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.48, (140, 160, 185), 1, cv2.LINE_AA)
@@ -122,6 +157,16 @@ class BiomechanicsRenderer:
         if not has_all:
             cv2.rectangle(canvas, (w - 180, 18), (w - 16, 52), (30, 40, 55), -1)
             cv2.putText(canvas, "TRACKING POSE...", (w - 170, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.48, (160, 180, 200), 1, cv2.LINE_AA)
+        elif viewpoint == "sagittal":
+            if depth_status == "BELOW PARALLEL":
+                cv2.rectangle(canvas, (w - 190, 18), (w - 16, 52), (25, 45, 30), -1)
+                cv2.putText(canvas, "\u2713 DEEP SQUAT", (w - 175, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.52, (100, 240, 140), 1, cv2.LINE_AA)
+            elif depth_status == "PARALLEL":
+                cv2.rectangle(canvas, (w - 180, 18), (w - 16, 52), (25, 45, 30), -1)
+                cv2.putText(canvas, "\u2713 PARALLEL", (w - 165, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.52, (100, 240, 140), 1, cv2.LINE_AA)
+            else:
+                cv2.rectangle(canvas, (w - 180, 18), (w - 16, 52), (30, 40, 55), -1)
+                cv2.putText(canvas, "LATERAL VIEW", (w - 165, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.50, (180, 200, 220), 1, cv2.LINE_AA)
         elif metrics.get("valgus_alert", False):
             cv2.rectangle(canvas, (w - 210, 15), (w - 16, 55), (30, 40, 200), -1)
             cv2.putText(canvas, "! KNEE VALGUS", (w - 195, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 2, cv2.LINE_AA)

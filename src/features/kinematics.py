@@ -41,10 +41,56 @@ def calculate_angle_3d(a: np.ndarray, b: np.ndarray, c: np.ndarray) -> float:
     return float(np.degrees(angle_rad))
 
 
+def calculate_isotropic_angle(
+    a: np.ndarray,
+    b: np.ndarray,
+    c: np.ndarray,
+    width: float = 1.0,
+    height: float = 1.0
+) -> float:
+    """
+    Calculate 2D planar joint angle scaled by image aspect ratio (square isotropic pixels).
+    Eliminates aspect ratio distortion in non-square camera frames (e.g. 9:16 portrait video).
+    """
+    p_a = np.array([a[0] * width, a[1] * height], dtype=np.float64)
+    p_b = np.array([b[0] * width, b[1] * height], dtype=np.float64)
+    p_c = np.array([c[0] * width, c[1] * height], dtype=np.float64)
+
+    v_ba = p_a - p_b
+    v_bc = p_c - p_b
+
+    norm_ba = np.linalg.norm(v_ba)
+    norm_bc = np.linalg.norm(v_bc)
+
+    if norm_ba < 1e-7 or norm_bc < 1e-7:
+        return 180.0
+
+    cosine = np.dot(v_ba, v_bc) / (norm_ba * norm_bc)
+    return float(np.degrees(np.arccos(np.clip(cosine, -1.0, 1.0))))
+
+
+def calculate_isotropic_trunk_lean(
+    shoulder: np.ndarray,
+    hip: np.ndarray,
+    width: float = 1.0,
+    height: float = 1.0
+) -> float:
+    """
+    Calculate true trunk inclination relative to gravity vertical in square isotropic pixels.
+    """
+    dx = abs(shoulder[0] - hip[0]) * width
+    dy = (hip[1] - shoulder[1]) * height
+
+    if abs(dy) < 1e-7:
+        return 90.0
+
+    return float(np.degrees(np.arctan2(dx, max(dy, 1e-7))))
+
+
 def calculate_trunk_inclination(shoulder: np.ndarray, hip: np.ndarray) -> float:
     """
     Calculate forward trunk lean angle relative to the gravity vertical axis.
-    In image coordinates, Y increases downward. A vertical upright torso
+    In 2D image coordinates, Y increases downward. A vertical upright torso
     yields 0 degrees; forward flexion increases toward 90 degrees.
 
     Parameters:
@@ -55,16 +101,59 @@ def calculate_trunk_inclination(shoulder: np.ndarray, hip: np.ndarray) -> float:
         Trunk inclination angle in degrees [0.0, 90.0+].
     """
     dx = float(shoulder[0] - hip[0])
-    dz = float(shoulder[2] - hip[2]) if len(shoulder) > 2 and len(hip) > 2 else 0.0
-    d_horizontal = float(np.sqrt(dx * dx + dz * dz))
-    # In standard camera coordinates, shoulder is above hip, so hip[1] > shoulder[1]
     dy = float(hip[1] - shoulder[1])
 
     if abs(dy) < 1e-7:
         return 90.0
 
-    angle_rad = np.arctan2(d_horizontal, max(dy, 1e-7))
+    angle_rad = np.arctan2(abs(dx), max(dy, 1e-7))
     return float(np.degrees(angle_rad))
+
+
+def classify_camera_viewpoint(
+    landmarks_list: list[dict[str, np.ndarray] | None]
+) -> tuple[str, str]:
+    """
+    Classify whether the camera viewpoint is Frontal or Sagittal (lateral profile),
+    and determine the dominant visible side ('right', 'left', or 'bilateral').
+
+    Returns:
+        tuple (viewpoint, dominant_side):
+          - viewpoint: 'frontal' | 'sagittal'
+          - dominant_side: 'right' | 'left' | 'bilateral'
+    """
+    dx_list: list[float] = []
+    dz_list: list[float] = []
+    z_diff_list: list[float] = []
+
+    for lm in landmarks_list:
+        if lm is not None and "left_shoulder" in lm and "right_shoulder" in lm:
+            ls = lm["left_shoulder"]
+            rs = lm["right_shoulder"]
+            dx_list.append(float(abs(ls[0] - rs[0])))
+            dz_list.append(float(abs(ls[2] - rs[2])))
+            # In MediaPipe, smaller Z is closer to camera:
+            # (left_shoulder.z - right_shoulder.z): positive if right is closer
+            z_diff_list.append(float(ls[2] - rs[2]))
+
+    if not dx_list:
+        return "frontal", "bilateral"
+
+    median_dx = float(np.median(dx_list))
+    median_dz = float(np.median(dz_list))
+    median_z_diff = float(np.median(z_diff_list))
+
+    ratio = median_dz / max(median_dx, 1e-4)
+
+    # In sagittal profile, shoulder depth separation (dz) is significantly larger than frontal width (dx)
+    if ratio > 1.3:
+        viewpoint = "sagittal"
+        dominant_side = "right" if median_z_diff > 0.0 else "left"
+    else:
+        viewpoint = "frontal"
+        dominant_side = "bilateral"
+
+    return viewpoint, dominant_side
 
 
 def calculate_frontal_valgus_index(
@@ -211,8 +300,11 @@ def segment_squat_phases(
             # Rep ends when athlete stands back up above standing threshold
             if angle >= standing_threshold:
                 end_frame = i
-                # Check if repetition achieved sufficient depth to be evaluated
-                if min_angle <= inflection_threshold and (end_frame - start_frame) >= int(fps * 0.6):
+                # Check if repetition achieved sufficient depth and physiological duration
+                if (
+                    30.0 <= min_angle <= inflection_threshold
+                    and (end_frame - start_frame) >= int(fps * 0.9)
+                ):
                     eccentric_frames = max(1, min_frame - start_frame)
                     concentric_frames = max(1, end_frame - min_frame)
 
@@ -220,17 +312,19 @@ def segment_squat_phases(
                     concentric_time = concentric_frames / fps
                     total_time = (end_frame - start_frame) / fps
 
-                    reps.append({
-                        "rep_number": len(reps) + 1,
-                        "start_frame": int(start_frame),
-                        "bottom_frame": int(min_frame),
-                        "end_frame": int(end_frame),
-                        "min_knee_angle": round(float(min_angle), 2),
-                        "eccentric_duration_s": round(float(eccentric_time), 2),
-                        "concentric_duration_s": round(float(concentric_time), 2),
-                        "total_duration_s": round(float(total_time), 2),
-                        "tempo_ratio": round(float(eccentric_time / max(concentric_time, 0.05)), 2)
-                    })
+                    # Filter out abrupt camera touches or setup artifacts
+                    if eccentric_time >= 0.4 and concentric_time >= 0.3:
+                        reps.append({
+                            "rep_number": len(reps) + 1,
+                            "start_frame": int(start_frame),
+                            "bottom_frame": int(min_frame),
+                            "end_frame": int(end_frame),
+                            "min_knee_angle": round(float(min_angle), 2),
+                            "eccentric_duration_s": round(float(eccentric_time), 2),
+                            "concentric_duration_s": round(float(concentric_time), 2),
+                            "total_duration_s": round(float(total_time), 2),
+                            "tempo_ratio": round(float(eccentric_time / max(concentric_time, 0.05)), 2)
+                        })
 
                 in_rep = False
                 min_angle = 180.0

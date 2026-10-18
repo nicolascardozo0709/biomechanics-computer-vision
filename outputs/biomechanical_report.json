@@ -1,165 +1,85 @@
 {
   "metadata": {
     "source": "data/upload_WhatsApp Video 2026-10-16 at 19.10.02.mp4",
+    "viewpoint": "sagittal",
+    "dominant_side": "right",
     "total_frames": 1519,
     "fps": 29.960552268244577,
     "duration_s": 50.67,
-    "total_reps_detected": 6,
-    "composite_mean_score": 60.7
+    "total_reps_detected": 3,
+    "composite_mean_score": 89.3
   },
   "repetitions": [
     {
       "rep_number": 1,
-      "overall_score": 57.5,
+      "overall_score": 97.0,
       "depth_score": 100.0,
-      "alignment_score": 34.1,
-      "trunk_score": 0.0,
-      "symmetry_score": 90.1,
-      "tempo_score": 50.0,
+      "alignment_score": 100.0,
+      "trunk_score": 100.0,
+      "symmetry_score": 100.0,
+      "tempo_score": 85.0,
       "depth_category": "Deep (Below Parallel)",
-      "min_knee_angle_deg": 81.7,
-      "max_trunk_lean_deg": 90.0,
-      "peak_valgus_displacement": 0.0749,
-      "knee_asymmetry_deg": 2.5,
-      "eccentric_time_s": 0.37,
-      "concentric_time_s": 0.2,
+      "min_knee_angle_deg": 79.1,
+      "max_trunk_lean_deg": 21.9,
+      "peak_valgus_displacement": 0.0,
+      "knee_asymmetry_deg": 0.0,
+      "eccentric_time_s": 1.34,
+      "concentric_time_s": 1.57,
       "flags": {
-        "knee_valgus": true,
-        "excessive_forward_lean": true,
+        "knee_valgus": false,
+        "excessive_forward_lean": false,
         "shallow_depth": false
       },
       "coaching_cues": [
-        "Knee Valgus Detected: Medial collapse measured 0.0749. Engage gluteus medius by cuing 'spread the floor' and tracking knees over second toe.",
-        "Excessive Forward Lean: Torso inclination reached 90.0\u00b0 (Limit: 45.0\u00b0). Cue 'proud chest' and maintain abdominal bracing to reduce lumbar shear forces."
+        "Excelente Cinem\u00e1tica Sagital: Profundidad completa (79.1\u00b0) con torso erguido (21.9\u00b0) y cadencia controlada."
       ]
     },
     {
       "rep_number": 2,
-      "overall_score": 47.0,
-      "depth_score": 88.0,
-      "alignment_score": 25.0,
-      "trunk_score": 0.0,
-      "symmetry_score": 20.0,
-      "tempo_score": 80.0,
-      "depth_category": "Valid Parallel Depth",
-      "min_knee_angle_deg": 86.9,
-      "max_trunk_lean_deg": 90.6,
-      "peak_valgus_displacement": 0.525,
-      "knee_asymmetry_deg": 52.5,
-      "eccentric_time_s": 3.04,
-      "concentric_time_s": 0.7,
+      "overall_score": 99.0,
+      "depth_score": 100.0,
+      "alignment_score": 100.0,
+      "trunk_score": 100.0,
+      "symmetry_score": 100.0,
+      "tempo_score": 95.0,
+      "depth_category": "Deep (Below Parallel)",
+      "min_knee_angle_deg": 72.6,
+      "max_trunk_lean_deg": 22.1,
+      "peak_valgus_displacement": 0.0,
+      "knee_asymmetry_deg": 0.0,
+      "eccentric_time_s": 2.04,
+      "concentric_time_s": 1.1,
       "flags": {
-        "knee_valgus": true,
-        "excessive_forward_lean": true,
+        "knee_valgus": false,
+        "excessive_forward_lean": false,
         "shallow_depth": false
       },
       "coaching_cues": [
-        "Knee Valgus Detected: Medial collapse measured 0.5250. Engage gluteus medius by cuing 'spread the floor' and tracking knees over second toe.",
-        "Excessive Forward Lean: Torso inclination reached 90.6\u00b0 (Limit: 45.0\u00b0). Cue 'proud chest' and maintain abdominal bracing to reduce lumbar shear forces.",
-        "Bilateral Imbalance: 52.5\u00b0 disparity between left (60.7\u00b0) and right (113.2\u00b0) knee depth. Incorporate unilateral split squats to address limb discrepancy."
+        "Excelente Cinem\u00e1tica Sagital: Profundidad completa (72.6\u00b0) con torso erguido (22.1\u00b0) y cadencia controlada."
       ]
     },
     {
       "rep_number": 3,
-      "overall_score": 63.2,
-      "depth_score": 100.0,
-      "alignment_score": 25.0,
-      "trunk_score": 35.0,
-      "symmetry_score": 69.4,
-      "tempo_score": 80.0,
-      "depth_category": "Deep (Below Parallel)",
-      "min_knee_angle_deg": 17.4,
-      "max_trunk_lean_deg": 71.0,
-      "peak_valgus_displacement": 0.1437,
-      "knee_asymmetry_deg": 7.6,
-      "eccentric_time_s": 1.67,
-      "concentric_time_s": 1.6,
-      "flags": {
-        "knee_valgus": true,
-        "excessive_forward_lean": true,
-        "shallow_depth": false
-      },
-      "coaching_cues": [
-        "Knee Valgus Detected: Medial collapse measured 0.1437. Engage gluteus medius by cuing 'spread the floor' and tracking knees over second toe.",
-        "Excessive Forward Lean: Torso inclination reached 71.0\u00b0 (Limit: 45.0\u00b0). Cue 'proud chest' and maintain abdominal bracing to reduce lumbar shear forces.",
-        "Bilateral Imbalance: 7.6\u00b0 disparity between left (13.6\u00b0) and right (21.2\u00b0) knee depth. Incorporate unilateral split squats to address limb discrepancy."
-      ]
-    },
-    {
-      "rep_number": 4,
-      "overall_score": 73.6,
-      "depth_score": 100.0,
-      "alignment_score": 25.0,
-      "trunk_score": 81.4,
-      "symmetry_score": 65.6,
+      "overall_score": 72.0,
+      "depth_score": 40.0,
+      "alignment_score": 100.0,
+      "trunk_score": 100.0,
+      "symmetry_score": 100.0,
       "tempo_score": 95.0,
-      "depth_category": "Deep (Below Parallel)",
-      "min_knee_angle_deg": 24.3,
-      "max_trunk_lean_deg": 52.4,
-      "peak_valgus_displacement": 0.1579,
-      "knee_asymmetry_deg": 8.6,
-      "eccentric_time_s": 2.1,
-      "concentric_time_s": 1.57,
+      "depth_category": "Shallow / Quarter Squat",
+      "min_knee_angle_deg": 132.6,
+      "max_trunk_lean_deg": 9.7,
+      "peak_valgus_displacement": 0.0,
+      "knee_asymmetry_deg": 0.0,
+      "eccentric_time_s": 1.6,
+      "concentric_time_s": 1.13,
       "flags": {
-        "knee_valgus": true,
-        "excessive_forward_lean": true,
-        "shallow_depth": false
+        "knee_valgus": false,
+        "excessive_forward_lean": false,
+        "shallow_depth": true
       },
       "coaching_cues": [
-        "Knee Valgus Detected: Medial collapse measured 0.1579. Engage gluteus medius by cuing 'spread the floor' and tracking knees over second toe.",
-        "Excessive Forward Lean: Torso inclination reached 52.4\u00b0 (Limit: 45.0\u00b0). Cue 'proud chest' and maintain abdominal bracing to reduce lumbar shear forces.",
-        "Bilateral Imbalance: 8.6\u00b0 disparity between left (20.0\u00b0) and right (28.6\u00b0) knee depth. Incorporate unilateral split squats to address limb discrepancy."
-      ]
-    },
-    {
-      "rep_number": 5,
-      "overall_score": 65.6,
-      "depth_score": 100.0,
-      "alignment_score": 25.0,
-      "trunk_score": 47.1,
-      "symmetry_score": 69.2,
-      "tempo_score": 80.0,
-      "depth_category": "Deep (Below Parallel)",
-      "min_knee_angle_deg": 17.4,
-      "max_trunk_lean_deg": 66.2,
-      "peak_valgus_displacement": 0.1453,
-      "knee_asymmetry_deg": 7.7,
-      "eccentric_time_s": 1.94,
-      "concentric_time_s": 1.74,
-      "flags": {
-        "knee_valgus": true,
-        "excessive_forward_lean": true,
-        "shallow_depth": false
-      },
-      "coaching_cues": [
-        "Knee Valgus Detected: Medial collapse measured 0.1453. Engage gluteus medius by cuing 'spread the floor' and tracking knees over second toe.",
-        "Excessive Forward Lean: Torso inclination reached 66.2\u00b0 (Limit: 45.0\u00b0). Cue 'proud chest' and maintain abdominal bracing to reduce lumbar shear forces.",
-        "Bilateral Imbalance: 7.7\u00b0 disparity between left (13.6\u00b0) and right (21.3\u00b0) knee depth. Incorporate unilateral split squats to address limb discrepancy."
-      ]
-    },
-    {
-      "rep_number": 6,
-      "overall_score": 57.3,
-      "depth_score": 100.0,
-      "alignment_score": 25.0,
-      "trunk_score": 0.0,
-      "symmetry_score": 80.0,
-      "tempo_score": 80.0,
-      "depth_category": "Deep (Below Parallel)",
-      "min_knee_angle_deg": 11.7,
-      "max_trunk_lean_deg": 95.6,
-      "peak_valgus_displacement": 0.1355,
-      "knee_asymmetry_deg": 5.0,
-      "eccentric_time_s": 2.27,
-      "concentric_time_s": 9.61,
-      "flags": {
-        "knee_valgus": true,
-        "excessive_forward_lean": true,
-        "shallow_depth": false
-      },
-      "coaching_cues": [
-        "Knee Valgus Detected: Medial collapse measured 0.1355. Engage gluteus medius by cuing 'spread the floor' and tracking knees over second toe.",
-        "Excessive Forward Lean: Torso inclination reached 95.6\u00b0 (Limit: 45.0\u00b0). Cue 'proud chest' and maintain abdominal bracing to reduce lumbar shear forces."
+        "Profundidad: Flexi\u00f3n de rodilla alcanz\u00f3 132.6\u00b0 (meta: <=90\u00b0 para paralelo completo). Mant\u00e9n el descenso hasta que el pliegue de la cadera quiebre la rodilla."
       ]
     }
   ],
