@@ -115,6 +115,28 @@ def test_classify_camera_viewpoint_sagittal_right():
     assert dominant_side == "right"
 
 
+def test_classify_camera_viewpoint_sagittal_left_facing_right():
+    """
+    When athlete in lateral profile faces right (nose anterior to hip),
+    the camera directly observes their left side.
+    """
+    synthetic_landmarks = []
+    for _ in range(30):
+        lm = {
+            "nose": np.array([0.65, 0.25, 0.0]),
+            "left_shoulder": np.array([0.48, 0.3, 0.25]),
+            "right_shoulder": np.array([0.50, 0.3, -0.15]),
+            "left_hip": np.array([0.48, 0.55, 0.22]),
+            "right_hip": np.array([0.50, 0.55, -0.12]),
+        }
+        synthetic_landmarks.append(lm)
+
+    viewpoint, dominant_side = classify_camera_viewpoint(synthetic_landmarks)
+    assert viewpoint == "sagittal"
+    assert dominant_side == "left"
+
+
+
 def test_segment_squat_phases_filters_setup_noise():
     """
     Quick dips, phone setup movements, or shallow bounces (< 0.4s eccentric or > 115° depth)

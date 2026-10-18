@@ -125,6 +125,7 @@ def classify_camera_viewpoint(
     dx_list: list[float] = []
     dz_list: list[float] = []
     z_diff_list: list[float] = []
+    facing_right_votes: list[bool] = []
 
     for lm in landmarks_list:
         if lm is not None and "left_shoulder" in lm and "right_shoulder" in lm:
@@ -132,23 +133,38 @@ def classify_camera_viewpoint(
             rs = lm["right_shoulder"]
             dx_list.append(float(abs(ls[0] - rs[0])))
             dz_list.append(float(abs(ls[2] - rs[2])))
-            # In MediaPipe, smaller Z is closer to camera:
-            # (left_shoulder.z - right_shoulder.z): positive if right is closer
             z_diff_list.append(float(ls[2] - rs[2]))
+
+            # Determine lateral facing orientation (anterior vector vs gravity horizontal X)
+            if "left_hip" in lm and "right_hip" in lm:
+                hip_x = float(lm["left_hip"][0] + lm["right_hip"][0]) / 2.0
+                if "nose" in lm:
+                    facing_right_votes.append(bool(lm["nose"][0] > hip_x))
+                else:
+                    sh_x = float(ls[0] + rs[0]) / 2.0
+                    if abs(sh_x - hip_x) > 0.01:
+                        facing_right_votes.append(bool(sh_x > hip_x))
 
     if not dx_list:
         return "frontal", "bilateral"
 
     median_dx = float(np.median(dx_list))
     median_dz = float(np.median(dz_list))
-    median_z_diff = float(np.median(z_diff_list))
 
     ratio = median_dz / max(median_dx, 1e-4)
 
     # In sagittal profile, shoulder depth separation (dz) is significantly larger than frontal width (dx)
     if ratio > 1.3:
         viewpoint = "sagittal"
-        dominant_side = "right" if median_z_diff > 0.0 else "left"
+        # In lateral projection:
+        # If athlete faces RIGHT (anterior points +X), camera observes athlete's LEFT side.
+        # If athlete faces LEFT (anterior points -X), camera observes athlete's RIGHT side.
+        if facing_right_votes:
+            facing_right = float(np.mean(facing_right_votes)) >= 0.5
+            dominant_side = "left" if facing_right else "right"
+        else:
+            median_z_diff = float(np.median(z_diff_list))
+            dominant_side = "right" if median_z_diff > 0.0 else "left"
     else:
         viewpoint = "frontal"
         dominant_side = "bilateral"

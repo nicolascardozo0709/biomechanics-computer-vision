@@ -192,14 +192,9 @@ def run_pipeline(
     rv_filt = smooth_kinematic_signal(rv_arr, window_length=9, polyorder=2)
 
     if viewpoint == "sagittal":
-        eff_knee_raw = []
-        for i in range(len(lk_filt)):
-            kl_val, kr_val = lk_filt[i], rk_filt[i]
-            val = min(kl_val, kr_val) if min(kl_val, kr_val) < 140.0 else max(kl_val, kr_val)
-            eff_knee_raw.append(val)
-        active_knee_signal = np.array(eff_knee_raw, dtype=np.float64)
+        active_knee_signal = lk_filt if dominant_side == "left" else rk_filt
     else:
-        active_knee_signal = lk_filt
+        active_knee_signal = (lk_filt + rk_filt) / 2.0
 
     ang_vel = calculate_angular_velocity(active_knee_signal, fps=fps)
 

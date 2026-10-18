@@ -20,6 +20,7 @@ from mediapipe.tasks.python import vision
 
 
 LANDMARK_INDEX_MAP = {
+    "nose": 0,
     "left_shoulder": 11,
     "right_shoulder": 12,
     "left_elbow": 13,
@@ -48,13 +49,31 @@ class PoseDetector:
         self._init_landmarker()
 
     def _resolve_model_path(self, model_path: str | Path | None) -> Path:
-        """Find local model asset or default location."""
+        """Find local model asset, prioritizing heavy and full models for clinical accuracy."""
         if model_path is not None and Path(model_path).exists():
             return Path(model_path)
 
         curr_dir = Path(__file__).resolve().parent
-        default_path = curr_dir.parent.parent / "data" / "models" / "pose_landmarker_lite.task"
-        return default_path
+        models_dir = curr_dir.parent.parent / "data" / "models"
+
+        models_dir.mkdir(parents=True, exist_ok=True)
+        # Prioritize heavy model for clinical accuracy, fallback to full, then lite
+        for model_name in ["pose_landmarker_heavy.task", "pose_landmarker_full.task", "pose_landmarker_lite.task"]:
+            candidate = models_dir / model_name
+            if candidate.exists():
+                return candidate
+
+        # Auto-download heavy model from Google MediaPipe CDN if missing
+        try:
+            import urllib.request
+            target = models_dir / "pose_landmarker_heavy.task"
+            url = "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_heavy/float16/latest/pose_landmarker_heavy.task"
+            print(f"[PoseDetector] Downloading high-precision model asset to {target}...")
+            urllib.request.urlretrieve(url, str(target))
+            return target
+        except Exception as e:
+            print(f"[PoseDetector] Could not auto-download model: {e}")
+            return models_dir / "pose_landmarker_lite.task"
 
     def _init_landmarker(self) -> None:
         """Initialize Google MediaPipe PoseLandmarker."""

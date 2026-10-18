@@ -65,71 +65,110 @@ class BiomechanicsRenderer:
             k_l, k_r = to_px(landmarks["left_knee"]), to_px(landmarks["right_knee"])
             a_l, a_r = to_px(landmarks["left_ankle"]), to_px(landmarks["right_ankle"])
 
+            # Optional extremities (elbows, wrists, feet)
+            e_l = to_px(landmarks["left_elbow"]) if "left_elbow" in landmarks else None
+            e_r = to_px(landmarks["right_elbow"]) if "right_elbow" in landmarks else None
+            w_l = to_px(landmarks["left_wrist"]) if "left_wrist" in landmarks else None
+            w_r = to_px(landmarks["right_wrist"]) if "right_wrist" in landmarks else None
+            ft_l = to_px(landmarks["left_foot_index"]) if "left_foot_index" in landmarks else None
+            ft_r = to_px(landmarks["right_foot_index"]) if "right_foot_index" in landmarks else None
+
             if viewpoint == "sagittal":
-                # Determine near (prominent) and far (occluded) limbs
-                if dominant_side == "right":
-                    n_s, n_h, n_k, n_a = s_r, h_r, k_r, a_r
-                    f_s, f_h, f_k, f_a = s_l, h_l, k_l, a_l
-                else:
+                # Determine near (camera-facing) and far (occluded) limbs
+                if dominant_side == "left":
                     n_s, n_h, n_k, n_a = s_l, h_l, k_l, a_l
+                    n_e, n_w, n_ft = e_l, w_l, ft_l
                     f_s, f_h, f_k, f_a = s_r, h_r, k_r, a_r
+                else:
+                    n_s, n_h, n_k, n_a = s_r, h_r, k_r, a_r
+                    n_e, n_w, n_ft = e_r, w_r, ft_r
+                    f_s, f_h, f_k, f_a = s_l, h_l, k_l, a_l
 
-                # Draw far occluded limb subtly to prevent visual tangling
-                cv2.line(canvas, f_s, f_h, (40, 50, 65), 1, cv2.LINE_AA)
-                cv2.line(canvas, f_h, f_k, (40, 50, 65), 2, cv2.LINE_AA)
-                cv2.line(canvas, f_k, f_a, (40, 50, 65), 2, cv2.LINE_AA)
+                # Draw far occluded limb faintly in dark steel blue
+                cv2.line(canvas, f_s, f_h, (50, 60, 75), 1, cv2.LINE_AA)
+                cv2.line(canvas, f_h, f_k, (50, 60, 75), 2, cv2.LINE_AA)
+                cv2.line(canvas, f_k, f_a, (50, 60, 75), 2, cv2.LINE_AA)
 
-                # Draw prominent near-side kinetic chain
-                leg_color = self.color_safe
-                cv2.line(canvas, n_s, n_h, (230, 240, 255), 3, cv2.LINE_AA)
+                # Color-code leg depth
+                leg_color = self.color_safe if knee_angle <= 95.0 else self.color_warning
+
+                # Prominent Near Arm
+                if n_e is not None:
+                    cv2.line(canvas, n_s, n_e, (255, 200, 100), 3, cv2.LINE_AA)
+                    if n_w is not None:
+                        cv2.line(canvas, n_e, n_w, (255, 200, 100), 3, cv2.LINE_AA)
+                        cv2.circle(canvas, n_w, 5, (255, 255, 255), -1, cv2.LINE_AA)
+                    cv2.circle(canvas, n_e, 5, (255, 255, 255), -1, cv2.LINE_AA)
+
+                # Prominent Near Kinetic Chain
+                cv2.line(canvas, n_s, n_h, (240, 245, 255), 4, cv2.LINE_AA)
                 cv2.line(canvas, n_h, n_k, leg_color, 4, cv2.LINE_AA)
                 cv2.line(canvas, n_k, n_a, leg_color, 4, cv2.LINE_AA)
 
-                # Horizontal Depth Reference Line across knee
-                cv2.line(canvas, (max(0, n_k[0] - 80), n_k[1]), (min(w, n_k[0] + 80), n_k[1]), (80, 200, 120), 1, cv2.LINE_AA)
+                # Foot Segment
+                if n_ft is not None:
+                    cv2.line(canvas, n_a, n_ft, (200, 225, 255), 3, cv2.LINE_AA)
+                    cv2.circle(canvas, n_ft, 5, (255, 255, 255), -1, cv2.LINE_AA)
 
-                # Joint Nodes
+                # Horizontal Depth Parallel Guide across knee
+                cv2.line(canvas, (max(0, n_k[0] - 90), n_k[1]), (min(w, n_k[0] + 90), n_k[1]), (0, 220, 140), 1, cv2.LINE_AA)
+
+                # Joint Nodes with high-tech glowing cores
                 for pt in [n_s, n_h, n_k, n_a]:
-                    cv2.circle(canvas, pt, 6, (255, 255, 255), -1, cv2.LINE_AA)
-                    cv2.circle(canvas, pt, 4, self.color_accent, -1, cv2.LINE_AA)
+                    cv2.circle(canvas, pt, 7, (255, 255, 255), -1, cv2.LINE_AA)
+                    cv2.circle(canvas, pt, 5, self.color_accent, -1, cv2.LINE_AA)
 
-                # Angle Badges
-                k_label_pt = (n_k[0] + 20, n_k[1])
-                cv2.rectangle(canvas, (k_label_pt[0] - 6, k_label_pt[1] - 16), (k_label_pt[0] + 68, k_label_pt[1] + 8), (10, 15, 20), -1)
-                cv2.putText(canvas, f"{knee_angle:.1f}\xb0", (k_label_pt[0], k_label_pt[1]), cv2.FONT_HERSHEY_SIMPLEX, 0.55, leg_color, 2, cv2.LINE_AA)
+                # Knee Flexion Badge (placed slightly ahead of knee)
+                k_label_pt = (n_k[0] + 16, n_k[1])
+                cv2.rectangle(canvas, (k_label_pt[0] - 4, k_label_pt[1] - 16), (k_label_pt[0] + 74, k_label_pt[1] + 8), (12, 16, 24), -1)
+                cv2.rectangle(canvas, (k_label_pt[0] - 4, k_label_pt[1] - 16), (k_label_pt[0] + 74, k_label_pt[1] + 8), leg_color, 1)
+                cv2.putText(canvas, f"{knee_angle:.1f}\xb0", (k_label_pt[0] + 2, k_label_pt[1] + 2), cv2.FONT_HERSHEY_SIMPLEX, 0.55, leg_color, 2, cv2.LINE_AA)
 
-                h_label_pt = (n_h[0] + 20, n_h[1] - 10)
-                cv2.rectangle(canvas, (h_label_pt[0] - 6, h_label_pt[1] - 16), (h_label_pt[0] + 84, h_label_pt[1] + 8), (10, 15, 20), -1)
+                # Torso Inclination Badge
+                h_label_pt = (n_h[0] + 16, n_h[1] - 12)
+                cv2.rectangle(canvas, (h_label_pt[0] - 4, h_label_pt[1] - 16), (h_label_pt[0] + 92, h_label_pt[1] + 8), (12, 16, 24), -1)
                 lean_color = self.color_warning if trunk_angle > 45.0 else (220, 220, 220)
-                cv2.putText(canvas, f"Lean:{trunk_angle:.1f}\xb0", (h_label_pt[0], h_label_pt[1]), cv2.FONT_HERSHEY_SIMPLEX, 0.45, lean_color, 1, cv2.LINE_AA)
+                cv2.rectangle(canvas, (h_label_pt[0] - 4, h_label_pt[1] - 16), (h_label_pt[0] + 92, h_label_pt[1] + 8), (60, 75, 95), 1)
+                cv2.putText(canvas, f"Lean:{trunk_angle:.1f}\xb0", (h_label_pt[0] + 2, h_label_pt[1] + 2), cv2.FONT_HERSHEY_SIMPLEX, 0.45, lean_color, 1, cv2.LINE_AA)
 
             else:
                 # Frontal View Skeletal Rendering
                 is_valgus = metrics.get("valgus_alert", False)
                 leg_color = self.color_danger if is_valgus else self.color_safe
 
+                # Arms
+                if e_l is not None and e_r is not None:
+                    cv2.line(canvas, s_l, e_l, (255, 200, 100), 3, cv2.LINE_AA)
+                    cv2.line(canvas, s_r, e_r, (255, 200, 100), 3, cv2.LINE_AA)
+                    if w_l is not None and w_r is not None:
+                        cv2.line(canvas, e_l, w_l, (255, 200, 100), 3, cv2.LINE_AA)
+                        cv2.line(canvas, e_r, w_r, (255, 200, 100), 3, cv2.LINE_AA)
+
+                # Torso & Pelvis
                 cv2.line(canvas, s_l, s_r, (180, 190, 200), 2, cv2.LINE_AA)
                 cv2.line(canvas, h_l, h_r, (180, 190, 200), 2, cv2.LINE_AA)
-                cv2.line(canvas, s_l, h_l, (200, 210, 220), 3, cv2.LINE_AA)
-                cv2.line(canvas, s_r, h_r, (200, 210, 220), 3, cv2.LINE_AA)
+                cv2.line(canvas, s_l, h_l, (220, 230, 240), 3, cv2.LINE_AA)
+                cv2.line(canvas, s_r, h_r, (220, 230, 240), 3, cv2.LINE_AA)
 
+                # Legs
                 cv2.line(canvas, h_l, k_l, leg_color, 4, cv2.LINE_AA)
                 cv2.line(canvas, k_l, a_l, leg_color, 4, cv2.LINE_AA)
                 cv2.line(canvas, h_r, k_r, leg_color, 4, cv2.LINE_AA)
                 cv2.line(canvas, k_r, a_r, leg_color, 4, cv2.LINE_AA)
+
+                # Feet
+                if ft_l is not None and ft_r is not None:
+                    cv2.line(canvas, a_l, ft_l, (200, 225, 255), 3, cv2.LINE_AA)
+                    cv2.line(canvas, a_r, ft_r, (200, 225, 255), 3, cv2.LINE_AA)
 
                 for pt in [s_l, s_r, h_l, h_r, k_l, k_r, a_l, a_r]:
                     cv2.circle(canvas, pt, 6, (255, 255, 255), -1, cv2.LINE_AA)
                     cv2.circle(canvas, pt, 4, self.color_accent, -1, cv2.LINE_AA)
 
                 k_label_pt = (k_l[0] - 80, k_l[1])
-                cv2.rectangle(canvas, (k_label_pt[0] - 6, k_label_pt[1] - 16), (k_label_pt[0] + 68, k_label_pt[1] + 8), (10, 15, 20), -1)
-                cv2.putText(canvas, f"{knee_angle:.1f}\xb0", (k_label_pt[0], k_label_pt[1]), cv2.FONT_HERSHEY_SIMPLEX, 0.55, leg_color, 2, cv2.LINE_AA)
-
-                h_label_pt = (h_l[0] - 90, h_l[1] - 10)
-                cv2.rectangle(canvas, (h_label_pt[0] - 6, h_label_pt[1] - 16), (h_label_pt[0] + 84, h_label_pt[1] + 8), (10, 15, 20), -1)
-                lean_color = self.color_warning if trunk_angle > 45.0 else (220, 220, 220)
-                cv2.putText(canvas, f"Lean:{trunk_angle:.1f}\xb0", (h_label_pt[0], h_label_pt[1]), cv2.FONT_HERSHEY_SIMPLEX, 0.45, lean_color, 1, cv2.LINE_AA)
+                cv2.rectangle(canvas, (k_label_pt[0] - 4, k_label_pt[1] - 16), (k_label_pt[0] + 74, k_label_pt[1] + 8), (12, 16, 24), -1)
+                cv2.rectangle(canvas, (k_label_pt[0] - 4, k_label_pt[1] - 16), (k_label_pt[0] + 74, k_label_pt[1] + 8), leg_color, 1)
+                cv2.putText(canvas, f"{knee_angle:.1f}\xb0", (k_label_pt[0] + 2, k_label_pt[1] + 2), cv2.FONT_HERSHEY_SIMPLEX, 0.55, leg_color, 2, cv2.LINE_AA)
 
         # Draw Top HUD Dashboard Banner
         hud_h = 70
