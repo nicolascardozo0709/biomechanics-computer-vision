@@ -45,6 +45,14 @@ def plot_kinematic_telemetry(
         for spine in ax.spines.values():
             spine.set_color("#2A3444")
 
+    if len(timestamps) == 0:
+        for ax in axes:
+            ax.text(0.5, 0.5, "NO LANDMARKS / MOVEMENT DETECTED", ha="center", va="center", color="#EF4444", fontsize=12, fontweight="bold")
+        plt.tight_layout()
+        fig.savefig(str(output_path), dpi=300, facecolor=fig.get_facecolor(), edgecolor="none")
+        plt.close(fig)
+        return output_path
+
     time = timestamps
 
     # 1. Panel 1: Knee Flexion Kinematics

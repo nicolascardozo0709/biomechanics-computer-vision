@@ -330,3 +330,44 @@ def segment_squat_phases(
                 min_angle = 180.0
 
     return reps
+
+
+def interpolate_landmarks_sequence(
+    raw_landmarks: list[dict[str, np.ndarray] | None],
+    max_gap: int = 6
+) -> list[dict[str, np.ndarray] | None]:
+    """
+    Interpolate missing 3D landmarks for short occlusion gaps up to max_gap frames (~200ms).
+    Gaps larger than max_gap (e.g. subject outside frame) remain None to prevent phantom skeleton artifacts.
+    """
+    n = len(raw_landmarks)
+    out: list[dict[str, np.ndarray] | None] = list(raw_landmarks)
+
+    i = 0
+    while i < n:
+        if out[i] is None:
+            gap_start = i
+            while i < n and out[i] is None:
+                i += 1
+            gap_end = i
+            gap_len = gap_end - gap_start
+
+            has_prev = (gap_start > 0 and out[gap_start - 1] is not None)
+            has_next = (gap_end < n and out[gap_end] is not None)
+
+            if has_prev and has_next and gap_len <= max_gap:
+                prev_lm = out[gap_start - 1]
+                next_lm = out[gap_end]
+                if prev_lm is not None and next_lm is not None:
+                    common_keys = [k for k in prev_lm.keys() if k in next_lm]
+                    for j in range(gap_start, gap_end):
+                        alpha = (j - (gap_start - 1)) / float(gap_len + 1)
+                        interp_dict: dict[str, np.ndarray] = {}
+                        for k in common_keys:
+                            interp_dict[k] = (1.0 - alpha) * prev_lm[k] + alpha * next_lm[k]
+                        out[j] = interp_dict
+        else:
+            i += 1
+
+    return out
+

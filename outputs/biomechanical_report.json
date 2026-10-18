@@ -32,7 +32,13 @@
       },
       "coaching_cues": [
         "Excelente Cinem\u00e1tica Sagital: Profundidad completa (79.1\u00b0) con torso erguido (21.9\u00b0) y cadencia controlada."
-      ]
+      ],
+      "start_frame": 510,
+      "bottom_frame": 550,
+      "end_frame": 597,
+      "start_time_s": 17.02,
+      "bottom_time_s": 18.36,
+      "end_time_s": 19.93
     },
     {
       "rep_number": 2,
@@ -56,7 +62,13 @@
       },
       "coaching_cues": [
         "Excelente Cinem\u00e1tica Sagital: Profundidad completa (72.6\u00b0) con torso erguido (22.1\u00b0) y cadencia controlada."
-      ]
+      ],
+      "start_frame": 660,
+      "bottom_frame": 721,
+      "end_frame": 754,
+      "start_time_s": 22.03,
+      "bottom_time_s": 24.06,
+      "end_time_s": 25.17
     },
     {
       "rep_number": 3,
@@ -80,7 +92,13 @@
       },
       "coaching_cues": [
         "Profundidad: Flexi\u00f3n de rodilla alcanz\u00f3 132.6\u00b0 (meta: <=90\u00b0 para paralelo completo). Mant\u00e9n el descenso hasta que el pliegue de la cadera quiebre la rodilla."
-      ]
+      ],
+      "start_frame": 921,
+      "bottom_frame": 969,
+      "end_frame": 1003,
+      "start_time_s": 30.74,
+      "bottom_time_s": 32.34,
+      "end_time_s": 33.48
     }
   ],
   "artifacts": {

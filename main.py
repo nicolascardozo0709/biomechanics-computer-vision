@@ -21,10 +21,6 @@ curr_dir = Path(__file__).resolve().parent
 if str(curr_dir) not in sys.path:
     sys.path.insert(0, str(curr_dir))
 
-if sys.platform == "win32":
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
-    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
-
 from src.data.video_loader import VideoLoader, generate_benchmark_squat_data
 from src.features.kinematics import (
     calculate_angle_3d,
@@ -35,52 +31,13 @@ from src.features.kinematics import (
     segment_squat_phases,
     classify_camera_viewpoint,
     calculate_isotropic_angle,
-    calculate_isotropic_trunk_lean
+    calculate_isotropic_trunk_lean,
+    interpolate_landmarks_sequence
 )
 from src.models.pose_detector import PoseDetector
 from src.models.technique_evaluator import TechniqueEvaluator
 from src.visualization.biomechanics_renderer import BiomechanicsRenderer
 from src.visualization.kinematic_plots import plot_kinematic_telemetry, plot_radar_profile
-
-
-def interpolate_landmarks_sequence(
-    raw_landmarks: list[dict[str, np.ndarray] | None],
-    max_gap: int = 6
-) -> list[dict[str, np.ndarray] | None]:
-    """
-    Interpolate missing 3D landmarks for short occlusion gaps up to max_gap frames (~200ms).
-    Gaps larger than max_gap (e.g. subject outside frame) remain None to prevent phantom skeleton artifacts.
-    """
-    n = len(raw_landmarks)
-    out: list[dict[str, np.ndarray] | None] = list(raw_landmarks)
-
-    i = 0
-    while i < n:
-        if out[i] is None:
-            gap_start = i
-            while i < n and out[i] is None:
-                i += 1
-            gap_end = i
-            gap_len = gap_end - gap_start
-
-            has_prev = (gap_start > 0 and out[gap_start - 1] is not None)
-            has_next = (gap_end < n and out[gap_end] is not None)
-
-            if has_prev and has_next and gap_len <= max_gap:
-                prev_lm = out[gap_start - 1]
-                next_lm = out[gap_end]
-                if prev_lm is not None and next_lm is not None:
-                    common_keys = [k for k in prev_lm.keys() if k in next_lm]
-                    for j in range(gap_start, gap_end):
-                        alpha = (j - (gap_start - 1)) / float(gap_len + 1)
-                        interp_dict: dict[str, np.ndarray] = {}
-                        for k in common_keys:
-                            interp_dict[k] = (1.0 - alpha) * prev_lm[k] + alpha * next_lm[k]
-                        out[j] = interp_dict
-        else:
-            i += 1
-
-    return out
 
 
 def run_pipeline(
@@ -264,6 +221,12 @@ def run_pipeline(
             viewpoint=viewpoint,
             dominant_side=dominant_side
         )
+        ev["start_frame"] = int(r["start_frame"])
+        ev["bottom_frame"] = int(r["bottom_frame"])
+        ev["end_frame"] = int(r["end_frame"])
+        ev["start_time_s"] = round(float(r["start_frame"] / fps), 2)
+        ev["bottom_time_s"] = round(float(r["bottom_frame"] / fps), 2)
+        ev["end_time_s"] = round(float(r["end_frame"] / fps), 2)
         evaluations.append(ev)
 
     # 5. Render Output Visualizations
@@ -295,16 +258,17 @@ def run_pipeline(
     if save_video and Path(source_path).exists():
         import cv2
         renderer = BiomechanicsRenderer()
-        cap = cv2.VideoCapture(source_path)
-        w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        render_loader = VideoLoader(source_path)
+        if not render_loader.open():
+            raise RuntimeError(f"Could not open video stream for rendering: {source_path}")
+
+        w = render_loader.width
+        h = render_loader.height
         fourcc = cv2.VideoWriter_fourcc(*"mp4v")
         out_vid = cv2.VideoWriter(str(annotated_video_path), fourcc, fps, (w, h))
 
-        f_idx = 0
-        while cap.isOpened():
-            ret, frame = cap.read()
-            if not ret or f_idx >= len(processed_landmarks):
+        for f_idx, t, frame in render_loader.frames():
+            if f_idx >= len(processed_landmarks):
                 break
 
             # Current metrics
@@ -345,9 +309,8 @@ def run_pipeline(
                 dominant_side=dominant_side
             )
             out_vid.write(annotated)
-            f_idx += 1
 
-        cap.release()
+        render_loader.close()
         out_vid.release()
 
         # Convert to web-compatible H.264 if imageio-ffmpeg is available
@@ -423,6 +386,13 @@ def run_pipeline(
 
 
 if __name__ == "__main__":
+    if sys.platform == "win32":
+        try:
+            sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+            sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+
     parser = argparse.ArgumentParser(description="AI Biomechanics & Kinematics Engine")
     parser.add_argument("--source", type=str, default=None, help="Path to video file or webcam index")
     parser.add_argument("--benchmark", action="store_true", help="Force synthetic benchmark evaluation")
@@ -436,3 +406,4 @@ if __name__ == "__main__":
         output_dir=args.output_dir,
         save_video=not args.no_video
     )
+

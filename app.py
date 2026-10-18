@@ -2,7 +2,8 @@
 FastAPI Microservice & Interactive SportsTech Biomechanics Dashboard.
 
 Provides high-performance RESTful API endpoints for kinematic evaluation
-and serves an interactive dark-mode SportsTech web application.
+and serves an interactive dark-mode SportsTech web application with dynamic
+video scrubbing, multi-viewpoint adaptation, and evidence-based clinical audits.
 
 Author: Nicolas Cardozo
 Pontificia Universidad Javeriana
@@ -10,6 +11,7 @@ Pontificia Universidad Javeriana
 
 import sys
 import json
+import time
 from pathlib import Path
 from typing import Any
 import numpy as np
@@ -19,9 +21,8 @@ curr_dir = Path(__file__).resolve().parent
 if str(curr_dir) not in sys.path:
     sys.path.insert(0, str(curr_dir))
 
-from fastapi import FastAPI, UploadFile, File, BackgroundTasks, HTTPException
-from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi.responses import HTMLResponse, FileResponse
 from pydantic import BaseModel, Field
 
 from main import run_pipeline
@@ -29,13 +30,14 @@ from main import run_pipeline
 app = FastAPI(
     title="Kinetix AI — Biomechanics & Kinematics Engine",
     description="Computer Vision & 3D Kinematics Analysis Microservice by Nicolas Cardozo (Pontificia Universidad Javeriana).",
-    version="1.0.0"
+    version="1.1.0"
 )
 
-# Output directory
+# Output and data directories
 OUTPUT_DIR = curr_dir / "outputs"
 DATA_DIR = curr_dir / "data"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 
 class RepetitionEvaluationSchema(BaseModel):
@@ -53,6 +55,12 @@ class RepetitionEvaluationSchema(BaseModel):
     knee_asymmetry_deg: float
     eccentric_time_s: float
     concentric_time_s: float
+    start_frame: int | None = None
+    bottom_frame: int | None = None
+    end_frame: int | None = None
+    start_time_s: float | None = None
+    bottom_time_s: float | None = None
+    end_time_s: float | None = None
     coaching_cues: list[str]
 
 
@@ -70,7 +78,7 @@ async def health_check() -> dict[str, Any]:
     return {
         "status": "healthy",
         "service": "Kinetix-AI Biomechanics Engine",
-        "version": "1.0.0",
+        "version": "1.1.0",
         "developer": "Nicolas Cardozo",
         "institution": "Pontificia Universidad Javeriana",
         "model_available": model_path.exists(),
@@ -81,7 +89,7 @@ async def health_check() -> dict[str, Any]:
 @app.get("/api/benchmark", response_model=AnalysisResponseSchema)
 async def get_benchmark_analysis() -> dict[str, Any]:
     """
-    Execute high-precision 2-rep benchmark kinematic analysis
+    Execute high-precision benchmark kinematic analysis
     (Rep 1: Pristine Olympic Deep Squat vs. Rep 2: Valgus & Forward Pitch Flaws).
     """
     benchmark_json = OUTPUT_DIR / "benchmark_report.json"
@@ -103,11 +111,18 @@ async def get_benchmark_analysis() -> dict[str, Any]:
     }
 
 
+@app.post("/api/load_benchmark")
+async def load_benchmark() -> dict[str, Any]:
+    """Run synthetic benchmark and update the active dashboard report."""
+    results = run_pipeline(use_benchmark=True, output_dir=OUTPUT_DIR, save_video=True)
+    return {"status": "success", "metadata": results["metadata"]}
+
+
 @app.post("/api/analyze", response_model=AnalysisResponseSchema)
 async def analyze_uploaded_video(file: UploadFile = File(...)) -> dict[str, Any]:
     """Upload custom video (MP4/MOV/AVI) and run full 3D pose kinematics pipeline."""
     if not file.filename.lower().endswith((".mp4", ".mov", ".avi", ".mkv", ".webm")):
-        raise HTTPException(status_code=400, detail="Format not supported. Please upload MP4, MOV, or AVI video.")
+        raise HTTPException(status_code=400, detail="Formato no soportado. Por favor sube un video MP4, MOV o AVI.")
 
     upload_path = DATA_DIR / f"upload_{file.filename}"
     with open(upload_path, "wb") as f:
@@ -132,7 +147,6 @@ async def get_artifact(filename: str):
     """Serve generated visual and video artifacts."""
     file_path = OUTPUT_DIR / filename
     if not file_path.exists():
-        # Check data dir as fallback
         file_path = DATA_DIR / filename
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="Artifact not found")
@@ -162,10 +176,130 @@ async def serve_dashboard() -> str:
         except Exception:
             report_data = {}
 
-    json_str = json.dumps(report_data)
+    # If report is empty, initialize with benchmark
+    if not report_data or "repetitions" not in report_data:
+        try:
+            report_data = run_pipeline(use_benchmark=True, output_dir=OUTPUT_DIR, save_video=True)
+        except Exception:
+            report_data = {"metadata": {}, "repetitions": []}
+
+    meta = report_data.get("metadata", {})
+    reps = report_data.get("repetitions", [])
+    cache_ts = int(time.time())
+
+    mean_score = meta.get("composite_mean_score", 0.0)
+    viewpoint = meta.get("viewpoint", "frontal")
+    dominant_side = meta.get("dominant_side", "bilateral")
+    total_reps = len(reps)
+
+    best_knee = min([r["min_knee_angle_deg"] for r in reps]) if reps else 0.0
+    max_trunk = max([r["max_trunk_lean_deg"] for r in reps]) if reps else 0.0
+    max_valgus = max([r["peak_valgus_displacement"] for r in reps]) if reps else 0.0
+
+    # Perspective Badge Styling
+    if viewpoint == "sagittal":
+        perspective_badge = f"""
+        <span class="badge" style="background: rgba(16, 185, 129, 0.15); color: #10B981; border: 1px solid rgba(16, 185, 129, 0.35);">
+            🎥 PERSPECTIVA SAGITAL (LATERAL) &bull; MIEMBRO ACTIVO: {dominant_side.upper()}
+        </span>
+        """
+        kpi_stability_label = "Inclinación Máx. Torso"
+        kpi_stability_val = f"{max_trunk:.1f}"
+        kpi_stability_unit = "grados"
+        kpi_stability_sub = "Spinal Neutrality (&le; 45° seguro)"
+    else:
+        perspective_badge = """
+        <span class="badge" style="background: rgba(0, 229, 255, 0.15); color: #00E5FF; border: 1px solid rgba(0, 229, 255, 0.35);">
+            🎥 PERSPECTIVA FRONTAL (CORONAL) &bull; ANÁLISIS BILATERAL
+        </span>
+        """
+        kpi_stability_label = "Valgo Dinámico FPPA"
+        kpi_stability_val = f"{max_valgus:.4f}"
+        kpi_stability_unit = "norm"
+        kpi_stability_sub = "Desviación medial máxima (&le; 0.02)"
+
+    # Timeline scrubber buttons
+    scrubber_buttons = []
+    for r in reps:
+        num = r["rep_number"]
+        st = r.get("start_time_s", 0.0)
+        sc = r["overall_score"]
+        col = "#10B981" if sc >= 85 else ("#F59E0B" if sc >= 70 else "#EF4444")
+        scrubber_buttons.append(
+            f'<button class="btn btn-secondary" onclick="scrubVideo({st})" style="padding: 6px 14px; font-size: 11px; font-family: var(--font-mono);">'
+            f'&#9201; Rep #{num} (<span style="color: {col}; font-weight: 700;">{sc:.1f}</span> &bull; {st}s)</button>'
+        )
+    timeline_buttons_html = "\n".join(scrubber_buttons) if scrubber_buttons else "<span>No hay repeticiones detectadas</span>"
+
+    # Dynamic Repetition Cards
+    rep_cards = []
+    for r in reps:
+        num = r["rep_number"]
+        sc = r["overall_score"]
+        score_color = "#10B981" if sc >= 85 else ("#F59E0B" if sc >= 70 else "#EF4444")
+        badge_class = "badge-pristine" if sc >= 85 else "badge-flawed"
+        badge_text = "TÉCNICA ÓPTIMA" if sc >= 85 else "DESVIACIÓN DETECTADA"
+        cues_list = r.get("coaching_cues", [])
+        cues_html = "".join([f"&bull; {c}<br>" for c in cues_list]) if cues_list else "&bull; Cinemática óptima registrada."
+        warning_class = "" if sc >= 85 else "warning"
+
+        st_s = r.get("start_time_s", 0.0)
+        bot_s = r.get("bottom_time_s", 0.0)
+        end_s = r.get("end_time_s", 0.0)
+
+        if viewpoint == "sagittal":
+            valgus_display = "N/A en Plano Sagital (Plano coronal ocluido)"
+            symmetry_display = f"Miembro {dominant_side.upper()} en foco (Unilateral monocular)"
+        else:
+            valgus_display = f"{r['peak_valgus_displacement']:.4f} {'(Desviación Valgo)' if r['flags'].get('knee_valgus') else '(Estable)'}"
+            symmetry_display = f"{r['knee_asymmetry_deg']:.1f}° {'(Asimetría bilateral)' if r['knee_asymmetry_deg'] > 6.0 else '(Equilateral)'}"
+
+        card_html = f"""
+        <div class="rep-card" id="repCard{num}" onclick="scrubVideo({st_s})" style="cursor: pointer;" title="Haz clic para reproducir esta repetición en el video">
+            <div class="rep-card-header">
+                <div>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <h3 style="font-size: 16px; font-weight: 800;">Repetición #{num}</h3>
+                        <span class="rep-badge {badge_class}">{badge_text}</span>
+                    </div>
+                    <p style="font-size: 12px; color: var(--text-muted); margin-top: 3px;">
+                        {r['depth_category']} &bull; Intervalo: <strong style="color: var(--accent-cyan); font-family: var(--font-mono);">{st_s}s - {end_s}s</strong> (Fondo: {bot_s}s)
+                    </p>
+                </div>
+                <div class="rep-score-box">
+                    <span class="rep-score-number" style="color: {score_color};">{sc:.1f}</span>
+                    <span style="font-size: 12px; color: var(--text-muted);">/ 100</span>
+                </div>
+            </div>
+            <ul class="spec-list">
+                <li class="spec-item"><span>Rango de Movimiento (Profundidad):</span> <strong>{r['min_knee_angle_deg']:.1f}° ({r['depth_category']})</strong></li>
+                <li class="spec-item"><span>Inclinación Torso vs Vertical:</span> <strong>{r['max_trunk_lean_deg']:.1f}° ({'Segura' if r['max_trunk_lean_deg'] <= 45.0 else 'Inclinación Excesiva'})</strong></li>
+                <li class="spec-item"><span>Estabilidad Valgo Dinámico:</span> <strong>{valgus_display}</strong></li>
+                <li class="spec-item"><span>Simetría Bilateral:</span> <strong>{symmetry_display}</strong></li>
+                <li class="spec-item"><span>Cadencia / Tempo (Excéntrico / Concéntrico):</span> <strong>{r['eccentric_time_s']}s / {r['concentric_time_s']}s</strong></li>
+            </ul>
+            <div class="coaching-box {warning_class}">
+                <strong>Prescripción Biomecánica & Feedback:</strong><br>
+                {cues_html}
+            </div>
+            <div style="margin-top: 12px; display: flex; justify-content: flex-end;">
+                <span style="font-size: 11px; color: var(--accent-cyan); font-family: var(--font-mono); font-weight: 600;">&#9654; Saltar video a {st_s}s &rarr;</span>
+            </div>
+        </div>
+        """
+        rep_cards.append(card_html)
+
+    rep_cards_html = "\n".join(rep_cards) if rep_cards else """
+    <div class="rep-card" style="grid-column: 1 / -1; text-align: center; padding: 40px;">
+        <h3 style="font-size: 16px; margin-bottom: 8px;">No se encontraron repeticiones completas</h3>
+        <p style="font-size: 13px; color: var(--text-muted);">Asegúrate de que la cámara enfoque el cuerpo entero y realiza el movimiento completo.</p>
+    </div>
+    """
+
+    reps_json = json.dumps(reps)
 
     html_content = f"""<!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -214,7 +348,6 @@ async def serve_dashboard() -> str:
             padding: 32px 24px;
         }}
 
-        /* Header Bar */
         header {{
             display: flex;
             justify-content: space-between;
@@ -222,6 +355,8 @@ async def serve_dashboard() -> str:
             padding-bottom: 24px;
             border-bottom: 1px solid var(--border-subtle);
             margin-bottom: 32px;
+            flex-wrap: wrap;
+            gap: 16px;
         }}
 
         .brand {{
@@ -252,17 +387,16 @@ async def serve_dashboard() -> str:
             display: flex;
             align-items: center;
             gap: 8px;
+            flex-wrap: wrap;
         }}
 
         .brand-text .badge {{
-            font-size: 10px;
+            font-size: 11px;
             font-weight: 700;
-            padding: 2px 8px;
+            padding: 3px 10px;
             border-radius: 9999px;
-            background: rgba(0, 229, 255, 0.12);
-            color: var(--accent-cyan);
-            border: 1px solid rgba(0, 229, 255, 0.3);
             text-transform: uppercase;
+            font-family: var(--font-mono);
         }}
 
         .brand-text p {{
@@ -300,12 +434,24 @@ async def serve_dashboard() -> str:
             color: #fff;
         }}
 
-        /* Metrics Grid */
+        /* KPI Metrics */
         .metrics-grid {{
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            grid-template-columns: repeat(4, 1fr);
             gap: 16px;
             margin-bottom: 32px;
+        }}
+
+        @media (max-width: 1024px) {{
+            .metrics-grid {{
+                grid-template-columns: repeat(2, 1fr);
+            }}
+        }}
+
+        @media (max-width: 640px) {{
+            .metrics-grid {{
+                grid-template-columns: 1fr;
+            }}
         }}
 
         .metric-card {{
@@ -319,8 +465,8 @@ async def serve_dashboard() -> str:
         }}
 
         .metric-card:hover {{
-            transform: translateY(-2px);
             border-color: var(--border-strong);
+            transform: translateY(-2px);
         }}
 
         .metric-card::before {{
@@ -336,39 +482,36 @@ async def serve_dashboard() -> str:
         .metric-label {{
             font-size: 12px;
             font-weight: 600;
+            color: var(--text-secondary);
             text-transform: uppercase;
             letter-spacing: 0.05em;
-            color: var(--text-muted);
-            margin-bottom: 6px;
         }}
 
         .metric-value {{
             font-size: 32px;
             font-weight: 800;
-            font-family: var(--font-mono);
-            letter-spacing: -0.03em;
             color: #fff;
-            display: flex;
-            align-items: baseline;
-            gap: 6px;
+            margin: 6px 0 2px 0;
+            font-family: var(--font-mono);
+            letter-spacing: -0.02em;
         }}
 
         .metric-unit {{
-            font-size: 14px;
+            font-size: 13px;
             font-weight: 500;
             color: var(--text-muted);
+            margin-left: 4px;
         }}
 
         .metric-subtext {{
             font-size: 12px;
-            color: var(--text-secondary);
-            margin-top: 6px;
+            color: var(--text-muted);
         }}
 
-        /* Main Workspace Split: Video / Visuals + Charts */
+        /* Workspace Grid */
         .workspace-grid {{
             display: grid;
-            grid-template-columns: 1.1fr 1fr;
+            grid-template-columns: 1.15fr 0.85fr;
             gap: 24px;
             margin-bottom: 32px;
         }}
@@ -382,7 +525,7 @@ async def serve_dashboard() -> str:
         .panel {{
             background: var(--bg-surface);
             border: 1px solid var(--border-subtle);
-            border-radius: 18px;
+            border-radius: 16px;
             padding: 24px;
             display: flex;
             flex-direction: column;
@@ -392,7 +535,7 @@ async def serve_dashboard() -> str:
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 20px;
+            margin-bottom: 16px;
         }}
 
         .panel-header h2 {{
@@ -434,6 +577,7 @@ async def serve_dashboard() -> str:
             display: flex;
             gap: 12px;
             margin-top: 16px;
+            flex-wrap: wrap;
         }}
 
         .btn {{
@@ -448,6 +592,7 @@ async def serve_dashboard() -> str:
             align-items: center;
             gap: 8px;
             transition: all 0.15s;
+            text-decoration: none;
         }}
 
         .btn-primary {{
@@ -470,6 +615,7 @@ async def serve_dashboard() -> str:
         .btn-secondary:hover {{
             background: #202B3D;
             border-color: var(--border-strong);
+            color: #fff;
         }}
 
         /* Repetition Audit Cards */
@@ -491,6 +637,13 @@ async def serve_dashboard() -> str:
             border: 1px solid var(--border-subtle);
             border-radius: 16px;
             padding: 24px;
+            transition: border-color 0.2s, box-shadow 0.2s, transform 0.2s;
+        }}
+
+        .rep-card:hover {{
+            border-color: var(--accent-cyan);
+            box-shadow: 0 0 18px rgba(0, 229, 255, 0.15);
+            transform: translateY(-2px);
         }}
 
         .rep-card-header {{
@@ -503,11 +656,12 @@ async def serve_dashboard() -> str:
         }}
 
         .rep-badge {{
-            font-size: 12px;
+            font-size: 11px;
             font-weight: 700;
             padding: 4px 10px;
             border-radius: 6px;
             font-family: var(--font-mono);
+            text-transform: uppercase;
         }}
 
         .badge-pristine {{
@@ -610,7 +764,6 @@ async def serve_dashboard() -> str:
             color: var(--text-muted);
         }}
 
-        /* Footer */
         footer {{
             padding-top: 32px;
             border-top: 1px solid var(--border-subtle);
@@ -619,6 +772,23 @@ async def serve_dashboard() -> str:
             align-items: center;
             font-size: 12px;
             color: var(--text-muted);
+            flex-wrap: wrap;
+            gap: 12px;
+        }}
+
+        @media print {{
+            body {{
+                background: #fff !important;
+                color: #000 !important;
+            }}
+            .action-bar, .author-links, button, #videoFileInput, #toggleMediaBtn {{
+                display: none !important;
+            }}
+            .rep-card, .metric-card, .panel, .artifact-card {{
+                border: 1px solid #ccc !important;
+                background: #fff !important;
+                color: #000 !important;
+            }}
         }}
     </style>
 </head>
@@ -629,7 +799,7 @@ async def serve_dashboard() -> str:
             <div class="brand">
                 <div class="logo-mark">K</div>
                 <div class="brand-text">
-                    <h1>KINETIX-AI <span class="badge">Production v1.0</span></h1>
+                    <h1>KINETIX-AI {perspective_badge}</h1>
                     <p>Computer Vision Biomechanical Kinematics & Injury Prevention Engine</p>
                 </div>
             </div>
@@ -637,9 +807,9 @@ async def serve_dashboard() -> str:
                 <strong>Nicolás Cardozo</strong>
                 <span>BS in Data Science (4th Sem) · Pontificia Universidad Javeriana</span>
                 <div class="author-links">
-                    <a href="https://github.com/nicolascardozo0709" target="_blank">GitHub</a>
+                    <a href="https://github.com/nicolascardozo0709/biomechanics-computer-vision" target="_blank">GitHub Repo</a>
                     <a href="https://www.linkedin.com/in/nicolas-cardozo-a779b331a" target="_blank">LinkedIn</a>
-                    <a href="/docs" target="_blank">OpenAPI Docs</a>
+                    <a href="/docs" target="_blank">FastAPI Docs</a>
                 </div>
             </div>
         </header>
@@ -647,24 +817,24 @@ async def serve_dashboard() -> str:
         <!-- KPI Metrics -->
         <div class="metrics-grid">
             <div class="metric-card" style="--card-accent: var(--accent-cyan);">
-                <div class="metric-label">Composite Technique</div>
-                <div class="metric-value">87.9 <span class="metric-unit">/ 100</span></div>
-                <div class="metric-subtext">Weighted across 5 clinical dimensions</div>
+                <div class="metric-label">Técnica Compuesta Promedio</div>
+                <div class="metric-value">{mean_score:.1f} <span class="metric-unit">/ 100</span></div>
+                <div class="metric-subtext">{total_reps} repeticiones evaluadas clínicamente</div>
             </div>
             <div class="metric-card" style="--card-accent: var(--accent-green);">
-                <div class="metric-label">Peak Flexion Depth</div>
-                <div class="metric-value">74.0 <span class="metric-unit">degrees</span></div>
-                <div class="metric-subtext">Olympic depth (Threshold: &le; 88°)</div>
+                <div class="metric-label">Máxima Profundidad ROM</div>
+                <div class="metric-value">{best_knee:.1f} <span class="metric-unit">grados</span></div>
+                <div class="metric-subtext">Meta: &le; 90° para paralelo completo</div>
             </div>
             <div class="metric-card" style="--card-accent: var(--accent-amber);">
-                <div class="metric-label">Peak Torso Pitch</div>
-                <div class="metric-value">52.0 <span class="metric-unit">degrees</span></div>
-                <div class="metric-subtext">Rep 2 forward compensation (&gt; 45°)</div>
+                <div class="metric-label">{kpi_stability_label}</div>
+                <div class="metric-value">{kpi_stability_val} <span class="metric-unit">{kpi_stability_unit}</span></div>
+                <div class="metric-subtext">{kpi_stability_sub}</div>
             </div>
             <div class="metric-card" style="--card-accent: var(--accent-purple);">
-                <div class="metric-label">Dynamic Valgus FPPA</div>
-                <div class="metric-value">0.035 <span class="metric-unit">norm</span></div>
-                <div class="metric-subtext">Medial knee shift detected in Rep 2</div>
+                <div class="metric-label">Plano Anatómico</div>
+                <div class="metric-value">{viewpoint.upper()} <span class="metric-unit">{dominant_side.upper()}</span></div>
+                <div class="metric-subtext">Adaptación multi-ángulo invariante</div>
             </div>
         </div>
 
@@ -672,37 +842,51 @@ async def serve_dashboard() -> str:
         <div class="workspace-grid">
             <div class="panel">
                 <div class="panel-header">
-                    <h2><span class="dot"></span> Computer Vision HUD Video Stream</h2>
-                    <span style="font-family: var(--font-mono); font-size: 11px; color: var(--text-muted);">60 FPS · MediaPipe 3D</span>
-                </div>
-                <div class="video-container" id="mediaContainer">
-                    <video id="biomechVideo" controls autoplay loop muted playsinline poster="/api/artifacts/video_poster.png?v=2">
-                        <source src="/api/artifacts/annotated_squat_analysis.mp4?v=2" type="video/mp4">
-                        Your browser does not support the video tag.
-                    </video>
-                    <img id="biomechGif" src="/api/artifacts/annotated_squat_analysis.gif?v=2" alt="Biomechanical Analysis Animation" style="display: none; width: 100%; height: 100%; object-fit: contain;">
-                </div>
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 8px;">
-                    <button class="btn btn-secondary" id="toggleMediaBtn" onclick="toggleMediaMode()" style="padding: 6px 12px; font-size: 11px;">
-                        &#128260; Alternar a Modo Animaci&oacute;n GIF (100% Compatible)
-                    </button>
-                    <span style="font-size: 11px; color: var(--accent-cyan); font-family: var(--font-mono);">
-                        H.264 Web-Ready &bull; 30 FPS &bull; MediaPipe 3D
+                    <h2><span class="dot"></span> Video HUD de Visión Artificial</h2>
+                    <span style="font-family: var(--font-mono); font-size: 11px; color: var(--text-muted);">
+                        FPS: {meta.get('fps', 30.0):.1f} &bull; MediaPipe 3D Landmark Lockstep
                     </span>
                 </div>
-                <div class="action-bar" style="flex-wrap: wrap;">
+                <div class="video-container" id="mediaContainer">
+                    <video id="biomechVideo" controls autoplay loop muted playsinline>
+                        <source src="/api/artifacts/annotated_squat_analysis.mp4?v={cache_ts}" type="video/mp4">
+                        Tu navegador no soporta reproducción de video HTML5.
+                    </video>
+                    <img id="biomechGif" src="/api/artifacts/annotated_squat_analysis.gif?v={cache_ts}" alt="Biomechanical Analysis Animation" style="display: none; width: 100%; height: 100%; object-fit: contain;">
+                </div>
+
+                <!-- Direct Repetition Scrubber Timeline -->
+                <div style="margin-top: 12px;">
+                    <span style="font-size: 11.5px; font-weight: 600; color: var(--text-muted); display: block; margin-bottom: 6px;">
+                        ⏱️ RECORRIDO TEMPORAL DIRECTO (Haz clic en una repetición para reproducirla):
+                    </span>
+                    <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                        {timeline_buttons_html}
+                    </div>
+                </div>
+
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 14px;">
+                    <button class="btn btn-secondary" id="toggleMediaBtn" onclick="toggleMediaMode()" style="padding: 6px 12px; font-size: 11px;">
+                        &#128260; Alternar Modo GIF / MP4
+                    </button>
+                    <span style="font-size: 11px; color: var(--accent-cyan); font-family: var(--font-mono);">
+                        H.264 Web-Ready &bull; OpenCV Isotropic
+                    </span>
+                </div>
+
+                <div class="action-bar">
                     <input type="file" id="videoFileInput" accept="video/mp4,video/quicktime,video/x-msvideo,video/*" style="display: none;" onchange="uploadUserVideo(this)">
                     <button class="btn btn-primary" id="uploadBtn" onclick="document.getElementById('videoFileInput').click()">&#128249; Subir Mi Video de Sentadilla</button>
-                    <button class="btn btn-secondary" onclick="triggerBenchmark()">&#9654; Resetear Benchmark</button>
-                    <a href="/api/artifacts/annotated_squat_analysis.mp4" download class="btn btn-secondary">&#128190; Export MP4 HUD</a>
-                    <a href="/api/artifacts/annotated_squat_analysis.gif" download class="btn btn-secondary">&#128190; Export GIF</a>
+                    <button class="btn btn-secondary" onclick="triggerBenchmark()">&#9654; Ver Benchmark Sintético</button>
+                    <button class="btn btn-secondary" onclick="window.print()">&#128424; Imprimir / Exportar Reporte</button>
+                    <a href="/api/artifacts/biomechanical_report.json" download class="btn btn-secondary">&#128190; Exportar JSON</a>
                 </div>
             </div>
 
             <div class="panel">
                 <div class="panel-header">
-                    <h2><span class="dot"></span> 5-Dimension Competency Radar Profile</h2>
-                    <span style="font-size: 11px; color: var(--accent-cyan); font-weight: 600;">Rep 1 vs Rep 2</span>
+                    <h2><span class="dot"></span> Perfil Radial de Competencia (5 Ejes)</h2>
+                    <span style="font-size: 11px; color: var(--accent-cyan); font-weight: 600;">Evaluación Repetición por Repetición</span>
                 </div>
                 <div style="flex: 1; display: flex; align-items: center; justify-content: center; min-height: 320px;">
                     <canvas id="radarChart"></canvas>
@@ -712,82 +896,33 @@ async def serve_dashboard() -> str:
 
         <!-- Repetition Detailed Biomechanical Audit -->
         <div style="margin-bottom: 16px;">
-            <h2 style="font-size: 18px; font-weight: 800; letter-spacing: -0.01em;">Repetition-by-Repetition Clinical Audit</h2>
-            <p style="font-size: 13px; color: var(--text-muted);">Automated kinematic segmentation and evidence-based coaching cues.</p>
+            <h2 style="font-size: 18px; font-weight: 800; letter-spacing: -0.01em;">Auditoría Clínica Repetición por Repetición</h2>
+            <p style="font-size: 13px; color: var(--text-muted);">Segmentación cinemática automática y prescripciones biomecánicas basadas en evidencia.</p>
         </div>
 
         <div class="reps-container">
-            <!-- Rep 1 Card -->
-            <div class="rep-card">
-                <div class="rep-card-header">
-                    <div>
-                        <h3 style="font-size: 16px; font-weight: 800;">Repetition #1</h3>
-                        <p style="font-size: 12px; color: var(--text-muted);">Pristine Olympic Deep Squat</p>
-                    </div>
-                    <div class="rep-score-box">
-                        <span class="rep-score-number" style="color: var(--accent-green);">98.0</span>
-                        <span style="font-size: 12px; color: var(--text-muted);">/ 100</span>
-                    </div>
-                </div>
-                <ul class="spec-list">
-                    <li class="spec-item"><span>Range of Motion (Depth):</span> <strong>74.0° (Deep Below Parallel)</strong></li>
-                    <li class="spec-item"><span>Torso Inclination vs Vertical:</span> <strong>22.0° (Safe &lt; 45°)</strong></li>
-                    <li class="spec-item"><span>Frontal Plane Valgus Displacement:</span> <strong>0.0000 (Pristine Tracking)</strong></li>
-                    <li class="spec-item"><span>Bilateral Symmetry Disparity:</span> <strong>0.0° (Equilateral)</strong></li>
-                    <li class="spec-item"><span>Tempo (Eccentric / Concentric):</span> <strong>1.03s / 1.03s</strong></li>
-                </ul>
-                <div class="coaching-box">
-                    <strong>Optimal Kinematics:</strong> Flawless depth achievement with stable spinal neutrality and solid knee tracking over lateral toes.
-                </div>
-            </div>
-
-            <!-- Rep 2 Card -->
-            <div class="rep-card">
-                <div class="rep-card-header">
-                    <div>
-                        <h3 style="font-size: 16px; font-weight: 800;">Repetition #2</h3>
-                        <p style="font-size: 12px; color: var(--text-muted);">Compromised Technique (Valgus & Forward Pitch)</p>
-                    </div>
-                    <div class="rep-score-box">
-                        <span class="rep-score-number" style="color: var(--accent-amber);">77.8</span>
-                        <span style="font-size: 12px; color: var(--text-muted);">/ 100</span>
-                    </div>
-                </div>
-                <ul class="spec-list">
-                    <li class="spec-item"><span>Range of Motion (Depth):</span> <strong style="color: var(--accent-amber);">103.2° (Slightly High)</strong></li>
-                    <li class="spec-item"><span>Torso Inclination vs Vertical:</span> <strong style="color: var(--accent-crimson);">52.0° (Excessive Lean &gt; 45°)</strong></li>
-                    <li class="spec-item"><span>Frontal Plane Valgus Displacement:</span> <strong style="color: var(--accent-crimson);">0.0350 (Medial Collapse)</strong></li>
-                    <li class="spec-item"><span>Bilateral Symmetry Disparity:</span> <strong>0.0°</strong></li>
-                    <li class="spec-item"><span>Tempo (Eccentric / Concentric):</span> <strong>0.97s / 0.97s</strong></li>
-                </ul>
-                <div class="coaching-box warning">
-                    <strong>Biomechanical Prescriptions:</strong><br>
-                    &bull; Depth Alert: Incomplete knee flexion at 103.2°. Work on ankle dorsiflexion mobility.<br>
-                    &bull; Knee Valgus Detected: Medial collapse of 0.0350. Cue &lsquo;spread the floor&rsquo; to recruit gluteus medius.<br>
-                    &bull; Excessive Forward Pitch: Torso pitched to 52.0°, increasing lumbar shear force.
-                </div>
-            </div>
+            {rep_cards_html}
         </div>
 
         <!-- High-Resolution Telemetry Artifacts -->
         <div style="margin-bottom: 16px;">
-            <h2 style="font-size: 18px; font-weight: 800; letter-spacing: -0.01em;">Publication-Quality Kinematic Reports</h2>
-            <p style="font-size: 13px; color: var(--text-muted);">Generated at 300 DPI using Matplotlib and Savitzky-Golay signal filtering.</p>
+            <h2 style="font-size: 18px; font-weight: 800; letter-spacing: -0.01em;">Reportes Cinemáticos de Nivel Publicación</h2>
+            <p style="font-size: 13px; color: var(--text-muted);">Generados a 300 DPI utilizando Matplotlib y filtrado polinomial Savitzky-Golay.</p>
         </div>
 
         <div class="artifacts-grid">
             <div class="artifact-card">
-                <img src="/api/artifacts/kinematic_telemetry_report.png" alt="Kinematic Telemetry">
+                <img src="/api/artifacts/kinematic_telemetry_report.png?v={cache_ts}" alt="Kinematic Telemetry">
                 <div class="artifact-info">
-                    <h3>4-Panel Kinematic Telemetry Curve</h3>
-                    <p>Continuous time-series tracking knee angles, angular velocities (&omega;), torso inclination, and medial valgus drift.</p>
+                    <h3>Curvas de Telemetría Cinemática (4 Paneles)</h3>
+                    <p>Series temporales continuas: flexión articular, velocidad angular (&omega;), inclinación espinal y derivación medial de valgo.</p>
                 </div>
             </div>
             <div class="artifact-card">
-                <img src="/api/artifacts/biomechanical_radar_profile.png" alt="Biomechanical Radar">
+                <img src="/api/artifacts/biomechanical_radar_profile.png?v={cache_ts}" alt="Biomechanical Radar">
                 <div class="artifact-info">
-                    <h3>5-Dimension Movement Competency Profile</h3>
-                    <p>Polar geometry comparing depth ROM, knee alignment, spinal neutrality, bilateral symmetry, and movement tempo.</p>
+                    <h3>Perfil Radial de Competencia del Movimiento</h3>
+                    <p>Geometría polar comparando ROM, alineación articular, neutralidad espinal, simetría bilateral y tempo.</p>
                 </div>
             </div>
         </div>
@@ -795,40 +930,55 @@ async def serve_dashboard() -> str:
         <!-- Footer -->
         <footer>
             <div>
-                &copy; 2026 <strong>Nicolás Cardozo</strong> · Portfolio Project 03 · Pontificia Universidad Javeriana
+                &copy; 2026 <strong>Nicolás Cardozo</strong> &bull; Proyecto de Portafolio 03 &bull; Pontificia Universidad Javeriana
             </div>
             <div>
-                FastAPI &bull; OpenCV &bull; MediaPipe Pose &bull; NumPy Vector Calculus &bull; SciPy Savitzky-Golay
+                FastAPI &bull; OpenCV Isotropic &bull; MediaPipe Pose &bull; Vector Calculus &bull; SciPy Savitzky-Golay
             </div>
         </footer>
     </div>
 
     <script>
+        const repetitions = {reps_json};
+
+        // Radar Chart Initialization
         const radarCtx = document.getElementById('radarChart').getContext('2d');
+        const palette = [
+            {{ bg: 'rgba(0, 229, 255, 0.25)', border: '#00E5FF' }},
+            {{ bg: 'rgba(16, 185, 129, 0.25)', border: '#10B981' }},
+            {{ bg: 'rgba(245, 158, 11, 0.25)', border: '#F59E0B' }},
+            {{ bg: 'rgba(239, 68, 68, 0.25)', border: '#EF4444' }},
+            {{ bg: 'rgba(139, 92, 246, 0.25)', border: '#8B5CF6' }}
+        ];
+
+        const datasets = repetitions.map((rep, idx) => {{
+            const col = palette[idx % palette.length];
+            return {{
+                label: `Rep #${{rep.rep_number}} (${{rep.overall_score}} pts)`,
+                data: [
+                    rep.depth_score,
+                    rep.alignment_score,
+                    rep.trunk_score,
+                    rep.symmetry_score,
+                    rep.tempo_score
+                ],
+                backgroundColor: col.bg,
+                borderColor: col.border,
+                borderWidth: 2.5,
+                pointBackgroundColor: col.border,
+                pointRadius: 4
+            }};
+        }});
+
         new Chart(radarCtx, {{
             type: 'radar',
             data: {{
-                labels: ['Depth ROM', 'Knee Alignment', 'Spinal Neutrality', 'Limb Symmetry', 'Tempo & Control'],
-                datasets: [
-                    {{
-                        label: 'Rep 1 (Pristine)',
-                        data: [100, 100, 100, 100, 95],
-                        backgroundColor: 'rgba(0, 229, 255, 0.2)',
-                        borderColor: '#00E5FF',
-                        borderWidth: 2.5,
-                        pointBackgroundColor: '#00E5FF',
-                        pointRadius: 4
-                    }},
-                    {{
-                        label: 'Rep 2 (Flawed)',
-                        data: [65, 58, 82, 100, 80],
-                        backgroundColor: 'rgba(239, 68, 68, 0.2)',
-                        borderColor: '#EF4444',
-                        borderWidth: 2.5,
-                        pointBackgroundColor: '#EF4444',
-                        pointRadius: 4
-                    }}
-                ]
+                labels: ['Profundidad ROM', 'Alineación Rodilla', 'Neutralidad Espinal', 'Simetría Miembros', 'Tempo & Control'],
+                datasets: datasets.length > 0 ? datasets : [{{
+                    label: 'Sin Repeticiones',
+                    data: [0, 0, 0, 0, 0],
+                    borderColor: '#64748B'
+                }}]
             }},
             options: {{
                 responsive: true,
@@ -859,12 +1009,20 @@ async def serve_dashboard() -> str:
             }}
         }});
 
+        function scrubVideo(timeSec) {{
+            const vid = document.getElementById('biomechVideo');
+            if (vid) {{
+                vid.currentTime = Math.max(0, timeSec);
+                vid.play().catch(() => {{}});
+            }}
+        }}
+
         async function uploadUserVideo(input) {{
             if (!input.files || input.files.length === 0) return;
             const file = input.files[0];
             const btn = document.getElementById('uploadBtn');
             const originalText = btn.innerHTML;
-            btn.innerHTML = '&#9203; Analizando Sentadilla con IA...';
+            btn.innerHTML = '&#9203; Procesando Video con IA (MediaPipe 3D)...';
             btn.disabled = true;
 
             const formData = new FormData();
@@ -882,10 +1040,10 @@ async def serve_dashboard() -> str:
                     btn.disabled = false;
                     return;
                 }}
-                btn.innerHTML = '&#9989; &iexcl;An&aacute;lisis Exitoso!';
+                btn.innerHTML = '&#9989; &iexcl;An&aacute;lisis Completado con &Eacute;xito!';
                 setTimeout(() => {{
                     window.location.reload();
-                }}, 1000);
+                }}, 800);
             }} catch (e) {{
                 alert('Error procesando video en el servidor.');
                 btn.innerHTML = originalText;
@@ -906,21 +1064,29 @@ async def serve_dashboard() -> str:
                 gif.style.display = 'none';
                 vid.style.display = 'block';
                 vid.play().catch(() => {{}});
-                btn.innerHTML = '&#128260; Alternar a Modo Animaci&oacute;n GIF (100% Compatible)';
+                btn.innerHTML = '&#128260; Alternar Modo GIF / MP4';
             }}
         }}
 
         async function triggerBenchmark() {{
-            const btn = document.querySelector('.btn-primary');
-            btn.innerText = 'Calculating Kinematics...';
+            const btn = event.target;
+            const oldText = btn.innerHTML;
+            btn.innerHTML = '&#9203; Cargando Benchmark Sintético...';
+            btn.disabled = true;
             try {{
-                const res = await fetch('/api/benchmark');
-                const data = await res.json();
-                btn.innerText = 'Done!';
-                setTimeout(() => {{ btn.innerHTML = '&#9654; Re-Run Kinematic Pipeline'; }}, 1500);
+                const res = await fetch('/api/load_benchmark', {{ method: 'POST' }});
+                if (res.ok) {{
+                    btn.innerHTML = '&#9989; &iexcl;Benchmark Cargado!';
+                    setTimeout(() => {{ window.location.reload(); }}, 600);
+                }} else {{
+                    alert('Error cargando benchmark.');
+                    btn.innerHTML = oldText;
+                    btn.disabled = false;
+                }}
             }} catch (e) {{
-                alert('Pipeline triggered successfully.');
-                btn.innerHTML = '&#9654; Re-Run Kinematic Pipeline';
+                alert('Error conectando con el servidor.');
+                btn.innerHTML = oldText;
+                btn.disabled = false;
             }}
         }}
     </script>

@@ -52,3 +52,13 @@ def test_dashboard_html_endpoint(client):
     assert "text/html" in res.headers["content-type"]
     assert "KINETIX-AI" in res.text
     assert "Nicolás Cardozo" in res.text
+
+
+def test_load_benchmark_endpoint(client):
+    """Verify load benchmark returns 200 and success."""
+    res = client.post("/api/load_benchmark")
+    assert res.status_code == 200
+    data = res.json()
+    assert data["status"] == "success"
+    assert "metadata" in data
+

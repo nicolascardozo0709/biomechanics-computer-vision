@@ -16,7 +16,7 @@ import numpy as np
 
 
 class VideoLoader:
-    """Manages video file stream ingestion and frame generation."""
+    """Manages video file stream ingestion and frame generation with automatic orientation normalization."""
 
     def __init__(self, source: str | int | Path):
         self.source = str(source)
@@ -26,9 +26,10 @@ class VideoLoader:
         self.width: int = 0
         self.height: int = 0
         self.duration_s: float = 0.0
+        self.rotation_code: int | None = None
 
     def open(self) -> bool:
-        """Open video capture stream and cache metadata."""
+        """Open video capture stream and cache metadata with rotation handling."""
         if self.source.isdigit():
             self.cap = cv2.VideoCapture(int(self.source))
         else:
@@ -37,10 +38,42 @@ class VideoLoader:
         if not self.cap.isOpened():
             return False
 
+        # Attempt enabling auto-orientation where supported
+        auto_oriented = False
+        if hasattr(cv2, "CAP_PROP_ORIENTATION_AUTO"):
+            try:
+                self.cap.set(cv2.CAP_PROP_ORIENTATION_AUTO, 1)
+                auto_oriented = bool(self.cap.get(cv2.CAP_PROP_ORIENTATION_AUTO))
+            except Exception:
+                auto_oriented = False
+
+        # Inspect orientation metadata if OpenCV backend did not auto-orient
+        self.rotation_code = None
+        if not auto_oriented and hasattr(cv2, "CAP_PROP_ORIENTATION_META"):
+            try:
+                meta = float(self.cap.get(cv2.CAP_PROP_ORIENTATION_META) or 0.0)
+                if meta == 90.0:
+                    self.rotation_code = cv2.ROTATE_90_CLOCKWISE
+                elif meta == 180.0:
+                    self.rotation_code = cv2.ROTATE_180
+                elif meta == 270.0:
+                    self.rotation_code = cv2.ROTATE_90_COUNTERCLOCKWISE
+            except Exception:
+                self.rotation_code = None
+
         self.fps = float(self.cap.get(cv2.CAP_PROP_FPS)) or 30.0
         self.frame_count = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        self.width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        self.height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        w = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        h = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+        # Adjust dimensions if manual rotation is active
+        if self.rotation_code in (cv2.ROTATE_90_CLOCKWISE, cv2.ROTATE_90_COUNTERCLOCKWISE):
+            self.width = h
+            self.height = w
+        else:
+            self.width = w
+            self.height = h
+
         self.duration_s = self.frame_count / self.fps if self.fps > 0 else 0.0
         return True
 
@@ -58,6 +91,7 @@ class VideoLoader:
     def frames(self) -> Generator[tuple[int, float, np.ndarray], None, None]:
         """
         Yield (frame_index, timestamp_seconds, frame_bgr) for each frame.
+        Applies rotation transformation if necessary for upright orientation.
         """
         if self.cap is None or not self.cap.isOpened():
             if not self.open():
@@ -68,6 +102,8 @@ class VideoLoader:
             ret, frame = self.cap.read()
             if not ret:
                 break
+            if self.rotation_code is not None:
+                frame = cv2.rotate(frame, self.rotation_code)
             timestamp = idx / self.fps
             yield idx, timestamp, frame
             idx += 1

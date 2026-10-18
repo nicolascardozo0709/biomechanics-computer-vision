@@ -1,28 +1,30 @@
 {
   "metadata": {
     "source": "C:\\Users\\nicoc\\Downloads\\data-science-portfolio\\projects\\03-biomechanics-computer-vision\\data\\sample_squat_benchmark.mp4",
+    "viewpoint": "frontal",
+    "dominant_side": "bilateral",
     "total_frames": 180,
     "fps": 30.0,
     "duration_s": 5.97,
     "total_reps_detected": 2,
-    "composite_mean_score": 87.9
+    "composite_mean_score": 91.0
   },
   "repetitions": [
     {
       "rep_number": 1,
-      "overall_score": 98.0,
+      "overall_score": 98.5,
       "depth_score": 100.0,
       "alignment_score": 100.0,
       "trunk_score": 100.0,
       "symmetry_score": 100.0,
-      "tempo_score": 80.0,
+      "tempo_score": 85.0,
       "depth_category": "Deep (Below Parallel)",
       "min_knee_angle_deg": 74.0,
-      "max_trunk_lean_deg": 22.0,
+      "max_trunk_lean_deg": 0.0,
       "peak_valgus_displacement": 0.0,
       "knee_asymmetry_deg": 0.0,
-      "eccentric_time_s": 1.03,
-      "concentric_time_s": 1.03,
+      "eccentric_time_s": 1.0,
+      "concentric_time_s": 1.0,
       "flags": {
         "knee_valgus": false,
         "excessive_forward_lean": false,
@@ -30,33 +32,43 @@
       },
       "coaching_cues": [
         "Optimal Kinematics: Excellent depth, neutral spinal alignment, and solid knee tracking."
-      ]
+      ],
+      "start_frame": 20,
+      "bottom_frame": 50,
+      "end_frame": 80,
+      "start_time_s": 0.67,
+      "bottom_time_s": 1.67,
+      "end_time_s": 2.67
     },
     {
       "rep_number": 2,
-      "overall_score": 77.8,
-      "depth_score": 65.0,
+      "overall_score": 83.5,
+      "depth_score": 70.0,
       "alignment_score": 82.0,
-      "trunk_score": 82.5,
+      "trunk_score": 100.0,
       "symmetry_score": 100.0,
-      "tempo_score": 80.0,
+      "tempo_score": 85.0,
       "depth_category": "Borderline / Slightly High",
       "min_knee_angle_deg": 103.2,
-      "max_trunk_lean_deg": 52.0,
+      "max_trunk_lean_deg": 0.0,
       "peak_valgus_displacement": 0.035,
       "knee_asymmetry_deg": 0.0,
-      "eccentric_time_s": 0.97,
-      "concentric_time_s": 0.97,
+      "eccentric_time_s": 0.93,
+      "concentric_time_s": 0.93,
       "flags": {
         "knee_valgus": true,
-        "excessive_forward_lean": true,
-        "shallow_depth": true
+        "excessive_forward_lean": false,
+        "shallow_depth": false
       },
       "coaching_cues": [
-        "Depth Alert: Achieved 103.2\u00b0 knee flexion (Threshold: <=95.0\u00b0). Work on ankle dorsiflexion mobility or elevate heels slightly.",
-        "Knee Valgus Detected: Medial collapse measured 0.0350. Engage gluteus medius by cuing 'spread the floor' and tracking knees over second toe.",
-        "Excessive Forward Lean: Torso inclination reached 52.0\u00b0 (Limit: 45.0\u00b0). Cue 'proud chest' and maintain abdominal bracing to reduce lumbar shear forces."
-      ]
+        "Knee Valgus Detected: Medial collapse measured 0.0350. Engage gluteus medius by cuing 'spread the floor' and tracking knees over second toe."
+      ],
+      "start_frame": 107,
+      "bottom_frame": 135,
+      "end_frame": 163,
+      "start_time_s": 3.57,
+      "bottom_time_s": 4.5,
+      "end_time_s": 5.43
     }
   ],
   "artifacts": {
