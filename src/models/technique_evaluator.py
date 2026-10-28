@@ -180,26 +180,26 @@ class TechniqueEvaluator:
         else:
             if depth_score < 70.0:
                 coaching_cues.append(
-                    f"Depth Alert: Achieved {active_knee:.1f}° knee flexion (Threshold: <={self.parallel_depth}°). "
-                    "Work on ankle dorsiflexion mobility or elevate heels slightly."
+                    f"Profundidad Insuficiente: Flexión de rodilla alcanzó {active_knee:.1f}° (meta: <={self.parallel_depth}° para paralelo). "
+                    "Trabaja en la movilidad de tobillos o amplía ligeramente la separación de pies."
                 )
             if valgus_flag:
                 coaching_cues.append(
-                    f"Knee Valgus Detected: Medial collapse measured {max_valgus:.4f}. "
-                    "Engage gluteus medius by cuing 'spread the floor' and tracking knees over second toe."
+                    f"Colapso en Valgo Detectado: Desviación medial de rodilla de {max_valgus:.4f}. "
+                    "Activa el glúteo medio empujando las rodillas hacia afuera alineadas con la punta del pie."
                 )
             if excessive_lean:
                 coaching_cues.append(
-                    f"Excessive Forward Lean: Torso inclination reached {max_trunk_lean:.1f}° (Limit: {self.max_trunk_lean}°). "
-                    "Cue 'proud chest' and maintain abdominal bracing to reduce lumbar shear forces."
+                    f"Inclinación Excesiva de Tronco: Torso alcanzó {max_trunk_lean:.1f}° (límite recomendado: {self.max_trunk_lean}°). "
+                    "Mantén el pecho erguido y el abdomen firme para proteger la zona lumbar."
                 )
             if asymmetry_deg > 6.0:
                 coaching_cues.append(
-                    f"Bilateral Imbalance: {asymmetry_deg:.1f}° disparity between left ({min_knee_l:.1f}°) and right ({min_knee_r:.1f}°) knee depth. "
-                    "Incorporate unilateral split squats to address limb discrepancy."
+                    f"Desbalance Bilateral: Disparidad de {asymmetry_deg:.1f}° entre rodilla izquierda ({min_knee_l:.1f}°) y derecha ({min_knee_r:.1f}°). "
+                    "Incorpora sentadillas búlgaras o trabajo unilateral para compensar la simetría."
                 )
             if len(coaching_cues) == 0:
-                coaching_cues.append("Optimal Kinematics: Excellent depth, neutral spinal alignment, and solid knee tracking.")
+                coaching_cues.append("Técnica Óptima: Excelente profundidad, alineación espinal neutra y adecuado control articular.")
 
         return {
             "rep_number": rep_meta["rep_number"],
