@@ -54,7 +54,13 @@ def run_pipeline(
     """
     Execute full end-to-end kinematic analysis pipeline for Squats or Push-Ups.
     """
-    out_path = curr_dir / output_dir if not Path(output_dir).is_absolute() else Path(output_dir)
+    out_dir_path = Path(output_dir)
+    if out_dir_path.is_absolute():
+        out_path = out_dir_path
+    elif (curr_dir / output_dir).parent.exists():
+        out_path = (curr_dir / output_dir).resolve()
+    else:
+        out_path = out_dir_path.resolve()
     out_path.mkdir(parents=True, exist_ok=True)
     data_dir = curr_dir / "data"
     data_dir.mkdir(parents=True, exist_ok=True)
