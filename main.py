@@ -257,15 +257,19 @@ def run_pipeline(
                 rep_num = 0
                 phase = "STANDBY"
                 for r in reps:
-                    if r["start_frame"] <= f_idx <= r["end_frame"]:
-                        rep_num = r["rep_number"]
-                        if f_idx < r["bottom_frame"]:
-                            phase = "DESCENT"
-                        elif f_idx == r["bottom_frame"]:
-                            phase = "INFLECTION"
+                    if f_idx >= r["start_frame"]:
+                        if f_idx <= r["end_frame"]:
+                            rep_num = r["rep_number"]
+                            if f_idx < r["bottom_frame"]:
+                                phase = "DESCENT"
+                            elif f_idx == r["bottom_frame"]:
+                                phase = "INFLECTION"
+                            else:
+                                phase = "ASCENT"
+                            break
                         else:
-                            phase = "ASCENT"
-                        break
+                            rep_num = r["rep_number"]
+                            phase = "LOCKOUT"
 
                 depth_status = "CHEST-TO-FLOOR" if cur_eb <= 80.0 else ("MILITARY STANDARD" if cur_eb <= 92.0 else "SHALLOW")
 
@@ -439,15 +443,19 @@ def run_pipeline(
                 rep_num = 0
                 phase = "STANDBY"
                 for r in reps:
-                    if r["start_frame"] <= f_idx <= r["end_frame"]:
-                        rep_num = r["rep_number"]
-                        if f_idx < r["bottom_frame"]:
-                            phase = "ECCENTRIC"
-                        elif f_idx == r["bottom_frame"]:
-                            phase = "INFLECTION"
+                    if f_idx >= r["start_frame"]:
+                        if f_idx <= r["end_frame"]:
+                            rep_num = r["rep_number"]
+                            if f_idx < r["bottom_frame"]:
+                                phase = "ECCENTRIC"
+                            elif f_idx == r["bottom_frame"]:
+                                phase = "INFLECTION"
+                            else:
+                                phase = "CONCENTRIC"
+                            break
                         else:
-                            phase = "CONCENTRIC"
-                        break
+                            rep_num = r["rep_number"]
+                            phase = "LOCKOUT"
 
                 depth_status = "BELOW PARALLEL" if cur_knee < 88.0 else ("PARALLEL" if cur_knee <= 100.0 else "ABOVE")
 
