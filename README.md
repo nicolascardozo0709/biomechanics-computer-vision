@@ -77,7 +77,7 @@ $$\hat{y}_k = \sum_{i=-m}^m c_i y_{k+i}$$
 
 ## 🚀 Cómo Probar la Aplicación (Sin Instalar Código)
 
-¿Quieres que reclutadores, amigos o clientes prueben el sistema sin configurar Python? Revisa la [**Guía Completa de Despliegue (DEPLOYMENT.md)**](DEPLOYMENT.md).
+ [**Guía Completa de Despliegue (DEPLOYMENT.md)**](DEPLOYMENT.md).
 
 ### 1. Despliegue Gratuito 24/7 en Hugging Face Spaces
 El proyecto incluye un `Dockerfile` listo para Hugging Face Spaces (con 16 GB RAM y GPU/CPU gratuita).
